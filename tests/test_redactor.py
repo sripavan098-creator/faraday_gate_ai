@@ -175,3 +175,24 @@ def test_redaction_output_does_not_leak_matched_attribute():
 
     dumped = findings[0].model_dump()
     assert "matched" not in dumped
+
+
+def test_redact_database_url_keeps_url_scheme_out_of_output():
+    text = 'DATABASE_URL = "postgres://fake_user:fake_password@localhost:5432/fake_db"'
+
+    findings = scan_secrets(text, origin="src/config.py")
+    result = redact_text(text, findings, mode="sensitive")
+
+    # Regression: URL values contain ':' which must not be mistaken for a
+    # key separator by assignment narrowing.
+    assert result.redacted_text == 'DATABASE_URL = "[SECRET_1]"'
+    assert "postgres" not in result.redacted_text
+
+
+def test_redact_unquoted_database_url():
+    text = "DATABASE_URL=postgres://fake_user:fake_password@localhost:5432/fake_db"
+
+    findings = scan_secrets(text, origin=".env.fake")
+    result = redact_text(text, findings, mode="sensitive")
+
+    assert result.redacted_text == 'DATABASE_URL="[SECRET_1]"'

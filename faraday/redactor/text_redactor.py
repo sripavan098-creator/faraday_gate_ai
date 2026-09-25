@@ -152,7 +152,10 @@ def is_redactable(finding: ScanFinding, mode: str) -> bool:
     raise ValueError(f"Unknown redaction mode: {mode}")
 
 
-def find_value_span(finding: ScanFinding) -> Optional[Tuple[int, int, str, bool]]:
+def find_value_span(
+    finding: ScanFinding,
+    text: str,
+) -> Optional[Tuple[int, int, str, bool]]:
     """Attempt to find the narrow sensitive value span inside a finding.
 
     Returns:
@@ -183,6 +186,12 @@ def find_value_span(finding: ScanFinding) -> Optional[Tuple[int, int, str, bool]
                 False,
             )
 
+    # If the match is already only a value (it sits right after `key =` or
+    # `key: "`), do not try to narrow further. Values such as URLs contain
+    # `:` characters, which would otherwise be mistaken for a key separator.
+    if context_is_assignment(text, base_start):
+        return (base_start, finding.end, matched, False)
+
     # Assignment-style secrets: key=value, key: value, key = "value".
     if finding.type == "secret":
         for separator in (":", "="):
@@ -191,11 +200,16 @@ def find_value_span(finding: ScanFinding) -> Optional[Tuple[int, int, str, bool]
             if separator_index == -1:
                 continue
 
+            key_part = matched[:separator_index].strip()
+
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_\-\.]*", key_part):
+                continue
+
             rest = matched[separator_index + 1 :]
 
             match = re.search(r"(\s*)(['\"]?)([^'\"\s]+)\2", rest)
 
-            if match:
+            if match and not match.group(3).startswith("//"):
                 was_quoted = bool(match.group(2))
                 value = match.group(3)
                 value_start = base_start + separator_index + 1 + match.start(3)
@@ -212,7 +226,7 @@ def find_value_span(finding: ScanFinding) -> Optional[Tuple[int, int, str, bool]
             if stripped:
                 value = stripped.strip("'\"")
 
-                if value:
+                if value and not value.startswith("//"):
                     value_index = rest.find(value[0])
 
                     if value_index != -1:
@@ -273,7 +287,7 @@ def build_replacements(
         if not is_redactable(finding, mode):
             continue
 
-        span = find_value_span(finding)
+        span = find_value_span(finding, text)
 
         if span is None:
             continue

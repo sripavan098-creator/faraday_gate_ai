@@ -25,6 +25,7 @@ from faraday.config import (
     save_policy,
 )
 from faraday.core.audit import AuditChain, AuditError
+from faraday.core.benchmark import benchmark_to_dict, run_scanner_benchmark
 from faraday.core.flow import (
     add_scan_findings,
     append_findings,
@@ -34,12 +35,25 @@ from faraday.core.flow import (
     finalize_session,
 )
 from faraday.core.policy import default_policy
+from faraday.core.proof import (
+    ProofError,
+    build_proof,
+    format_proof_plain,
+    proof_to_dict,
+    render_proof,
+)
 from faraday.core.wrap import run_wrap
 from faraday.redactor import redact_text
 from faraday.scanners.base import ScanFinding
 from faraday.scanners.files import read_git_diff, scan_path
 from faraday.scanners.path_rules import scan_path_denial
 from faraday.scanners.pipeline import scan_text
+from faraday.tui.dashboard import (
+    build_dashboard_report,
+    dashboard_to_dict,
+    format_dashboard_plain,
+    render_dashboard,
+)
 
 app = typer.Typer(
     help="Faraday Gate: zero-egress AI agent firewall for AI coding agents.",
@@ -754,6 +768,263 @@ def wrap(
         )
 
     raise typer.Exit(code=result.exit_code)
+
+
+@app.command()
+def gate(
+    mode: Optional[str] = typer.Option(
+        None,
+        "--mode",
+        "-m",
+        help="Set gate mode: strict-local, sanitize-external, or observe-only.",
+    ),
+    show: bool = typer.Option(
+        False,
+        "--show",
+        help="Show current gate mode without changing it.",
+    ),
+) -> None:
+    """Show or set the Faraday Gate operating mode.
+
+    This is a policy-level control. It does not claim OS-level network
+    isolation by itself.
+    """
+
+    policy = require_policy()
+
+    allowed_modes = {"strict-local", "sanitize-external", "observe-only"}
+
+    if show or mode is None:
+        console.print("[SAFE] Faraday Gate status")
+        console.print(f"Mode: {policy.mode}")
+        console.print(f"Egress policy: {policy.network.egress}")
+        console.print(f"Secret action: {policy.secrets.action}")
+        console.print(f"PII action: {policy.pii.action}")
+        console.print(f"Injection action: {policy.prompt_injection.action}")
+        console.print(f"Command action: {policy.commands.action}")
+        return
+
+    if mode not in allowed_modes:
+        console.print("[red]Invalid mode.[/red]")
+        console.print("Allowed modes:")
+        console.print("  strict-local")
+        console.print("  sanitize-external")
+        console.print("  observe-only")
+        raise typer.Exit(code=2)
+
+    policy.mode = mode
+
+    if mode == "strict-local":
+        policy.network.egress = "deny"
+    elif mode == "sanitize-external":
+        policy.network.egress = "allow"
+    elif mode == "observe-only":
+        policy.network.egress = "deny"
+
+    try:
+        save_policy(policy, config_path())
+    except Exception as exc:
+        console.print(f"[red]Could not save config:[/red] {exc}")
+        raise typer.Exit(code=2)
+
+    console.print(f"[SAFE] Gate mode set to: {mode}")
+    console.print(f"Egress policy: {policy.network.egress}")
+
+
+@app.command()
+def prove(
+    session_id: str = typer.Argument(
+        "latest",
+        help="Session ID or 'latest'.",
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format: table, plain, or json.",
+    ),
+) -> None:
+    """Generate a Faraday Gate proof report.
+
+    Exit codes:
+        0 = proof generated and audit chain valid
+        2 = configuration/usage error
+        3 = audit chain invalid or internal security subsystem error
+    """
+
+    chain = AuditChain()
+
+    try:
+        report = build_proof(chain, session_id)
+    except ProofError as exc:
+        console.print(f"[red]Proof error:[/red] {exc}")
+        raise typer.Exit(code=2)
+    except AuditError as exc:
+        console.print(f"[red]Audit error:[/red] {exc}")
+        raise typer.Exit(code=3)
+
+    if format == "json":
+        typer.echo(json.dumps(proof_to_dict(report), default=str, indent=2))
+    elif format == "plain":
+        typer.echo(format_proof_plain(report))
+    elif format == "table":
+        render_proof(console, report)
+    else:
+        console.print("[red]Unsupported format. Use table, plain, or json.[/red]")
+        raise typer.Exit(code=2)
+
+    if not report.audit_chain_valid:
+        raise typer.Exit(code=3)
+
+
+@app.command()
+def dashboard(
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format: table, plain, or json.",
+    ),
+    verify: bool = typer.Option(
+        True,
+        "--verify/--no-verify",
+        help="Verify audit hash chain while rendering dashboard.",
+    ),
+) -> None:
+    """Render the Faraday Gate dashboard."""
+
+    policy = require_policy()
+
+    chain = AuditChain()
+
+    try:
+        report = build_dashboard_report(
+            policy,
+            chain,
+            verify_chain=verify,
+        )
+    except AuditError as exc:
+        console.print(f"[red]Audit error:[/red] {exc}")
+        raise typer.Exit(code=3)
+
+    if format == "json":
+        typer.echo(json.dumps(dashboard_to_dict(report), default=str, indent=2))
+    elif format == "plain":
+        typer.echo(format_dashboard_plain(report))
+    elif format == "table":
+        render_dashboard(console, report)
+    else:
+        console.print("[red]Unsupported format. Use table, plain, or json.[/red]")
+        raise typer.Exit(code=2)
+
+    if report.audit_valid is False:
+        raise typer.Exit(code=3)
+
+
+@app.command()
+def benchmark(
+    iterations: int = typer.Option(
+        20,
+        "--iterations",
+        "-n",
+        help="Number of scan iterations.",
+    ),
+    payload_bytes: int = typer.Option(
+        50_000,
+        "--payload-bytes",
+        help="Approximate payload size in bytes.",
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format: table, plain, or json.",
+    ),
+) -> None:
+    """Benchmark deterministic scanner throughput.
+
+    This does not benchmark NPU inference unless a verified Snapdragon/NPU
+    backend is later integrated.
+    """
+
+    if iterations < 1:
+        console.print("[red]Iterations must be >= 1.[/red]")
+        raise typer.Exit(code=2)
+
+    if payload_bytes < 0:
+        console.print("[red]Payload bytes must be >= 0.[/red]")
+        raise typer.Exit(code=2)
+
+    try:
+        policy = load_policy()
+    except ConfigError:
+        console.print(
+            "[yellow]Config missing or invalid. Using default policy for benchmark.[/yellow]"
+        )
+        policy = default_policy()
+
+    result = run_scanner_benchmark(
+        policy=policy,
+        iterations=iterations,
+        payload_bytes=payload_bytes,
+    )
+
+    if format == "json":
+        typer.echo(json.dumps(benchmark_to_dict(result), default=str, indent=2))
+        return
+
+    if format == "plain":
+        lines = [
+            "FARADAY BENCHMARK",
+            "=================",
+            f"Iterations: {result.iterations}",
+            f"Payload Bytes: {result.payload_bytes}",
+            f"Payload MB: {result.payload_mb:.6f}",
+            f"Findings Last Run: {result.findings_last}",
+            f"Total Seconds: {result.total_seconds:.6f}",
+            f"Mean ms: {result.mean_ms:.3f}",
+            f"P50 ms: {result.p50_ms:.3f}",
+            f"P95 ms: {result.p95_ms:.3f}",
+            f"MB/s: {result.mb_per_second:.3f}",
+            "",
+            "Notes:",
+        ]
+
+        for note in result.notes:
+            lines.append(f"- {note}")
+
+        typer.echo("\n".join(lines))
+        return
+
+    if format != "table":
+        console.print("[red]Unsupported format. Use table, plain, or json.[/red]")
+        raise typer.Exit(code=2)
+
+    table = Table(title="Faraday Benchmark")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="white")
+
+    table.add_row("Iterations", str(result.iterations))
+    table.add_row("Payload Bytes", str(result.payload_bytes))
+    table.add_row("Payload MB", f"{result.payload_mb:.6f}")
+    table.add_row("Findings Last Run", str(result.findings_last))
+    table.add_row("Total Seconds", f"{result.total_seconds:.6f}")
+    table.add_row("Mean ms", f"{result.mean_ms:.3f}")
+    table.add_row("P50 ms", f"{result.p50_ms:.3f}")
+    table.add_row("P95 ms", f"{result.p95_ms:.3f}")
+    table.add_row("MB/s", f"{result.mb_per_second:.3f}")
+
+    console.print(table)
+
+    notes_text = "\n".join(f"- {note}" for note in result.notes)
+
+    console.print(
+        Panel(
+            notes_text,
+            title="Notes",
+            border_style="yellow",
+        )
+    )
 
 
 @policy_app.command("show")

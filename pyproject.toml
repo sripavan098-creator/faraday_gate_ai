@@ -37,3 +37,8 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["faraday*"]
+
+[tool.pytest.ini_options]
+# Scope collection to the project test suite. samples/repo is a fake demo
+# repository and must not be collected as part of the Faraday Gate tests.
+testpaths = ["tests"]

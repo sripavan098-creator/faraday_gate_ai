@@ -104,7 +104,9 @@ def finalize_session(
     status: SessionStatus,
     output_text: Optional[str] = None,
 ) -> None:
-    """Finish a session, append the final event, and store session metadata.
+    """Finish a session, append final events, and store session metadata.
+
+    This also persists model events and command events.
 
     The session audit head is set after the final audit event so the stored
     session points at the latest chain head.
@@ -114,6 +116,31 @@ def finalize_session(
         status=status,
         output_text=output_text,
     )
+
+    for model_event in session.model_events:
+        chain.append(
+            session_id=session.id,
+            event="model_event",
+            metadata={
+                "backend_name": model_event.backend_name,
+                "device_name": model_event.device_name,
+                "model_role": model_event.model_role,
+                "status": model_event.status,
+                "latency_ms": model_event.latency_ms,
+            },
+        )
+
+    for command_event in session.command_events:
+        chain.append(
+            session_id=session.id,
+            event="command_event",
+            metadata={
+                "command": command_event.command,
+                "action": command_event.action,
+                "rule": command_event.rule,
+                "reason": command_event.reason,
+            },
+        )
 
     chain.append(
         session_id=session.id,

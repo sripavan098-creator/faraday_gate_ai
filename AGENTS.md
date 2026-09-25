@@ -78,6 +78,20 @@ python -m venv .venv
 - **`wrap` passthrough**: `faraday wrap [OPTIONS] -- CMD ...`. Everything after
   `--` is the wrapped command, including anything that looks like a faraday
   option — place `--format` etc. *before* `--`.
+- **Escaping and markup** applies to proof/dashboard titles too — that is why
+  panel titles use `[SAFE]`/`[BLOCKED]` deliberately as Rich color tags.
+- **`pytest` collection is scoped to `tests/` via `testpaths`.** `samples/repo`
+  contains its own `tests/` package that otherwise collides with the top-level
+  `tests` package and breaks collection.
+- **Audit corruption semantics.** A structurally corrupt `events.jsonl` (invalid
+  JSON) raises `AuditError` from `iter_events()`. `prove` catches it and exits 3.
+  `dashboard` catches it at the `verify()` call and renders a degraded report,
+  then exits 3 when `audit_valid is False`. With `--no-verify` a corrupt chain
+  still exits 3 because the report still marks the chain invalid.
+- **Redaction narrowing must not split URL values.** `DATABASE_URL = "postgres://..."`
+  contains `:`; assignment narrowing must check `context_is_assignment()` first,
+  otherwise `postgres` is mistaken for a key and the output becomes
+  `DATABASE_URL = "postgres:"[SECRET_2]""`.
 - **Security**: all demo/sample secrets must be fake (`AKIAFAKEEXAMPLE123`,
   `sk_test_fake...`). Never commit real credentials or call external cloud APIs.
 - **CLI contract**: every command must support plain-text and `--format json`
@@ -126,7 +140,7 @@ pitch; say "tamper-evident" and explain the anchoring.
 - [x] Step 5 — redaction engine (placeholders, overlap-safe, syntax-preserving)
 - [x] Step 6 — core CLI commands (`doctor`, `scan`, `redact`)
 - [x] Step 7 — agent wrapping (`wrap`, adapters, wrap engine)
-- [ ] Step 8 — proof, dashboard, benchmark
-- [ ] Step 9 — sample demo repository
+- [x] Step 8 — proof, dashboard, benchmark
+- [x] Step 9 — sample demo repository (`samples/repo`)
 - [ ] Step 10 — tests
 - [ ] Step 11 — submission and pitch
