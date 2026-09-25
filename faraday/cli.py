@@ -11,6 +11,8 @@ from typing import List, Optional, Tuple
 import typer
 import yaml
 from rich.console import Console
+from rich.markup import escape
+from rich.panel import Panel
 from rich.table import Table
 
 from faraday import __version__
@@ -32,6 +34,7 @@ from faraday.core.flow import (
     finalize_session,
 )
 from faraday.core.policy import default_policy
+from faraday.core.wrap import run_wrap
 from faraday.redactor import redact_text
 from faraday.scanners.base import ScanFinding
 from faraday.scanners.files import read_git_diff, scan_path
@@ -604,6 +607,153 @@ def redact(
         )
     else:
         typer.echo(result.redacted_text)
+
+
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def wrap(
+    ctx: typer.Context,
+    workdir: Optional[Path] = typer.Option(
+        None,
+        "--workdir",
+        "-C",
+        help="Working directory/repository to use for repository scanning.",
+    ),
+    scan_repo: bool = typer.Option(
+        False,
+        "--scan-repo/--no-scan-repo",
+        help="Scan the workdir/repository context.",
+    ),
+    execute: bool = typer.Option(
+        False,
+        "--execute",
+        help="Execute the wrapped command. Not recommended in strict-local mode.",
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format: table, plain, or json.",
+    ),
+    max_files: int = typer.Option(
+        500,
+        "--max-files",
+        help="Maximum number of files to scan.",
+    ),
+    max_file_bytes: int = typer.Option(
+        1_000_000,
+        "--max-file-bytes",
+        help="Maximum file size in bytes to scan.",
+    ),
+) -> None:
+    """Wrap another CLI command under Faraday Gate protection.
+
+    Examples:
+        faraday wrap -- qwen-coder "Fix login bug"
+        faraday wrap --scan-repo -- qwen-coder "Fix login bug"
+        faraday wrap --workdir ./samples/repo --scan-repo -- qwen-coder "Fix login bug"
+
+    Exit codes:
+        0 = allowed / no blocking finding
+        1 = policy blocked operation
+        2 = configuration/usage error
+        3 = internal security subsystem error
+    """
+
+    command: List[str] = [str(arg) for arg in ctx.args]
+
+    if command and command[0] == "--":
+        command = command[1:]
+
+    if not command:
+        console.print("[red]No command provided after wrap.[/red]")
+        console.print("Example: faraday wrap -- qwen-coder 'Fix login bug'")
+        raise typer.Exit(code=2)
+
+    policy = require_policy()
+
+    if workdir is not None and not workdir.exists():
+        console.print(f"[red]Workdir does not exist: {workdir}[/red]")
+        raise typer.Exit(code=2)
+
+    try:
+        result = run_wrap(
+            command=command,
+            policy=policy,
+            workdir=workdir,
+            scan_repo=scan_repo,
+            execute=execute,
+            max_files=max_files,
+            max_file_bytes=max_file_bytes,
+        )
+    except ValueError as exc:
+        console.print(f"[red]Wrap error:[/red] {exc}")
+        raise typer.Exit(code=2)
+    except Exception as exc:
+        console.print(f"[red]Wrap internal error:[/red] {exc}")
+        raise typer.Exit(code=3)
+
+    if format == "json":
+        payload = {
+            "status": result.status,
+            "exit_code": result.exit_code,
+            "adapter": result.adapter_name,
+            "session_id": result.session_id,
+            "files_scanned": result.files_scanned,
+            "prompt_tokens_scanned": result.prompt_tokens_scanned,
+            "egress_method": result.egress_method,
+            "blocked_count": len(result.blocked),
+            "redactable_count": len(result.redactable),
+            "warnings": result.warnings,
+            "safe_output": result.safe_output,
+            "findings": [finding_payload(finding) for finding in result.findings],
+        }
+
+        typer.echo(json.dumps(payload, default=str, indent=2))
+
+    else:
+        output_findings(result.findings, format)
+
+        for warning in result.warnings:
+            console.print(f"[yellow][WARNING] {escape(warning)}[/yellow]")
+
+        safe_output_escaped = escape(result.safe_output)
+
+        if result.status == "blocked":
+            console.print(
+                Panel(
+                    safe_output_escaped,
+                    title="[BLOCKED] Faraday Safe Output",
+                    border_style="red",
+                )
+            )
+        elif result.status in {"degraded", "error"}:
+            console.print(
+                Panel(
+                    safe_output_escaped,
+                    title="[WARNING] Faraday Safe Output",
+                    border_style="yellow",
+                )
+            )
+        else:
+            console.print(
+                Panel(
+                    safe_output_escaped,
+                    title="[SAFE] Faraday Safe Output",
+                    border_style="green",
+                )
+            )
+
+        console.print(
+            f"Adapter: {result.adapter_name} | "
+            f"Status: {result.status} | "
+            f"Files scanned: {result.files_scanned} | "
+            f"Prompt tokens: {result.prompt_tokens_scanned} | "
+            f"Blocking: {len(result.blocked)} | "
+            f"Redactable: {len(result.redactable)} | "
+            f"Egress: {result.egress_method}"
+        )
+
+    raise typer.Exit(code=result.exit_code)
 
 
 @policy_app.command("show")

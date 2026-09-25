@@ -71,6 +71,13 @@ python -m venv .venv
 - **Use `Optional[Path]` / `Optional[str]`, not `Path | None` / `str | None`, in CLI
   signatures.** With `from __future__ import annotations`, Typer evaluates the
   annotation string and can raise on PEP 604 unions under `requires-python >=3.10`.
+- **Escape all dynamic text before passing it to `rich`.** Rich parses `[square
+  brackets]` as markup, so `[faraday-mock-coder]` in wrap output was silently
+  deleted from the terminal panel. Use `rich.markup.escape(...)` on safe output
+  and warnings. (JSON/plain output paths are unaffected.)
+- **`wrap` passthrough**: `faraday wrap [OPTIONS] -- CMD ...`. Everything after
+  `--` is the wrapped command, including anything that looks like a faraday
+  option — place `--format` etc. *before* `--`.
 - **Security**: all demo/sample secrets must be fake (`AKIAFAKEEXAMPLE123`,
   `sk_test_fake...`). Never commit real credentials or call external cloud APIs.
 - **CLI contract**: every command must support plain-text and `--format json`
@@ -118,7 +125,7 @@ pitch; say "tamper-evident" and explain the anchoring.
 - [x] Step 4 — scanners (secrets, pii, injection, command guard, path rules, pipeline)
 - [x] Step 5 — redaction engine (placeholders, overlap-safe, syntax-preserving)
 - [x] Step 6 — core CLI commands (`doctor`, `scan`, `redact`)
-- [ ] Step 7 — agent wrapping
+- [x] Step 7 — agent wrapping (`wrap`, adapters, wrap engine)
 - [ ] Step 8 — proof, dashboard, benchmark
 - [ ] Step 9 — sample demo repository
 - [ ] Step 10 — tests
