@@ -190,6 +190,9 @@ class Session(BaseModel):
     command_events: List[CommandEvent] = Field(default_factory=list)
     egress: List[EgressObservation] = Field(default_factory=list)
 
+    files_scanned: int = 0
+    prompt_tokens_scanned: int = 0
+
     output_hash: Optional[str] = None
     audit_head: Optional[str] = None
 

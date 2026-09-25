@@ -62,6 +62,15 @@ python -m venv .venv
   subcommands will stop working.
 - **Use `app.add_typer(...)`, not `app.add_subapp(...)`.** `add_subapp` is not a
   Typer API; it fails at import time.
+- **No optional-value options.** Typer 0.27 rejects `--flag[=VALUE]` style (tested
+  `is_flag=False, flag_value=...`; it errors). Hence `scan` exposes the git diff as
+  a boolean `--diff` plus `--diff-ref TEXT`, not `--diff [REF]`. Consequences:
+  `faraday scan --diff --format plain` (correct) vs `faraday scan --diff HEAD`
+  (now a usage error — use `--diff-ref HEAD`). Without this split, `--format plain`
+  was silently forwarded to `git diff` and crashed.
+- **Use `Optional[Path]` / `Optional[str]`, not `Path | None` / `str | None`, in CLI
+  signatures.** With `from __future__ import annotations`, Typer evaluates the
+  annotation string and can raise on PEP 604 unions under `requires-python >=3.10`.
 - **Security**: all demo/sample secrets must be fake (`AKIAFAKEEXAMPLE123`,
   `sk_test_fake...`). Never commit real credentials or call external cloud APIs.
 - **CLI contract**: every command must support plain-text and `--format json`
@@ -108,7 +117,7 @@ pitch; say "tamper-evident" and explain the anchoring.
 - [x] Step 3 — session and audit chain (`audit show/verify/export`)
 - [x] Step 4 — scanners (secrets, pii, injection, command guard, path rules, pipeline)
 - [x] Step 5 — redaction engine (placeholders, overlap-safe, syntax-preserving)
-- [ ] Step 6 — core CLI commands
+- [x] Step 6 — core CLI commands (`doctor`, `scan`, `redact`)
 - [ ] Step 7 — agent wrapping
 - [ ] Step 8 — proof, dashboard, benchmark
 - [ ] Step 9 — sample demo repository

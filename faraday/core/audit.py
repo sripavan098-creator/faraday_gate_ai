@@ -197,6 +197,19 @@ class AuditChain:
                 """
             )
 
+            self._migrate_sessions_table(conn)
+
+    def _migrate_sessions_table(self, conn: sqlite3.Connection) -> None:
+        """Add newer session columns to pre-existing databases."""
+
+        existing = {
+            row[1] for row in conn.execute("PRAGMA table_info(sessions)")
+        }
+
+        for column in ("files_scanned", "prompt_tokens_scanned"):
+            if column not in existing:
+                conn.execute(f"ALTER TABLE sessions ADD COLUMN {column} INTEGER DEFAULT 0")
+
     def _next_event_id(self) -> str:
         if not self.events_path.exists():
             return "evt_000001"
@@ -423,9 +436,11 @@ class AuditChain:
                     decisions_count,
                     redactions_count,
                     output_hash,
-                    audit_head
+                    audit_head,
+                    files_scanned,
+                    prompt_tokens_scanned
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     session.id,
@@ -440,6 +455,8 @@ class AuditChain:
                     len(session.redactions),
                     session.output_hash,
                     session.audit_head,
+                    session.files_scanned,
+                    session.prompt_tokens_scanned,
                 ),
             )
 
