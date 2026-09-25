@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Faraday local state
+.faraday/cache/
+.faraday/sanitized/
+.faraday/sanitized-workspace/
+
+# Do not ignore audit by default because demo may show it
+# But if you want local audit private, uncomment:
+# .faraday/audit/

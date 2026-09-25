@@ -1,0 +1,39 @@
+[project]
+name = "faraday-gate"
+version = "0.1.0"
+description = "Zero-egress AI agent firewall for AI coding agents"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.9",
+    "rich>=13.7",
+    "pyyaml>=6.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+tui = [
+    "textual>=0.50",
+]
+ast = [
+    "tree-sitter>=0.21",
+    "tree-sitter-languages>=1.10",
+]
+ai = [
+    "onnxruntime>=1.17",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+faraday = "faraday.cli:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["faraday*"]
