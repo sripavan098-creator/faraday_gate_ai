@@ -196,3 +196,80 @@ def test_redact_unquoted_database_url():
     result = redact_text(text, findings, mode="sensitive")
 
     assert result.redacted_text == 'DATABASE_URL="[SECRET_1]"'
+
+
+def test_secret_key_is_preserved_when_assignment_follows_preceding_line():
+    # Regression: context_is_assignment used to scan back 120 characters across
+    # newlines, so `X=` on the previous line made a key-span finding look like a
+    # value span. Narrowing then replaced the whole `api_key = "..."` region and
+    # deleted the key, emitting `X=\n"[SECRET_1]"`.
+    text = 'X=\napi_key = "abcdef1234567890abcdef"\n'
+
+    findings = scan_text(text, origin="src/config.py")
+    result = redact_text(text, findings, mode="sensitive")
+
+    assert "api_key" in result.redacted_text
+    assert result.redacted_text == 'X=\napi_key = "[SECRET_1]"\n'
+
+
+def test_secret_key_is_preserved_after_colon_line():
+    text = 'creds:\napi_key = "abcdef1234567890abcdef"\n'
+
+    findings = scan_text(text, origin="src/config.py")
+    result = redact_text(text, findings, mode="sensitive")
+
+    assert result.redacted_text == 'creds:\napi_key = "[SECRET_1]"\n'
+
+
+def test_secret_key_is_preserved_after_open_paren():
+    text = 'f(a =\n  api_key = "abcdef1234567890abcdef"\n'
+
+    findings = scan_text(text, origin="src/config.py")
+    result = redact_text(text, findings, mode="sensitive")
+
+    assert result.redacted_text == 'f(a =\n  api_key = "[SECRET_1]"\n'
+
+
+def test_bare_url_outside_assignment_is_redacted_whole():
+    text = "See mysql://fakeuser:fakepass@localhost/db for details.\n"
+
+    findings = scan_text(text, origin="notes.md")
+    result = redact_text(text, findings, mode="sensitive")
+
+    assert result.redacted_text == "See [SECRET_1] for details.\n"
+
+
+def test_url_on_its_own_line_is_not_given_fabricated_quotes():
+    # Regression: a preceding line ending in `=` must not make an unrelated
+    # bare URL on the next line look like an assignment value, which would wrap
+    # the placeholder in quotes that were never in the source.
+    text = "X=\npostgres://fakeuser:fakepass@localhost/db\n"
+
+    findings = scan_text(text, origin="notes.md")
+    result = redact_text(text, findings, mode="sensitive")
+
+    assert result.redacted_text == "X=\n[SECRET_1]\n"
+
+
+def test_yaml_url_value_is_redacted_whole():
+    text = "creds:\n  DATABASE_URL: postgres://fake_user:fake_password@localhost:5432/fake_db\n"
+
+    findings = scan_text(text, origin="config.yaml")
+    result = redact_text(text, findings, mode="sensitive")
+
+    assert result.redacted_text == 'creds:\n  DATABASE_URL: "[SECRET_1]"\n'
+
+
+def test_redacted_python_stays_parseable():
+    import ast
+
+    text = (
+        "XDATABASE_URL = "
+        '"postgres://fake_user:fake_password@localhost:5432/fake_db"\n'
+        'api_key = "abcdef1234567890abcdef"\n'
+    )
+
+    findings = scan_text(text, origin="src/config.py")
+    result = redact_text(text, findings, mode="sensitive")
+
+    ast.parse(result.redacted_text)

@@ -186,12 +186,11 @@ def find_value_span(
                 False,
             )
 
-    # If the match is already only a value (it sits right after `key =` or
-    # `key: "`), do not try to narrow further. Values such as URLs contain
-    # `:` characters, which would otherwise be mistaken for a key separator.
-    if context_is_assignment(text, base_start):
-        return (base_start, finding.end, matched, False)
-
+    # Build the candidate value spans first. Narrowing to just the value is
+    # what preserves an assignment's key, and it is safe for spans that already
+    # point at the value. A URL scheme such as `postgres://` is rejected by the
+    # `//` guard below, so `postgres` is never mistaken for a key.
+    #
     # Assignment-style secrets: key=value, key: value, key = "value".
     if finding.type == "secret":
         for separator in (":", "="):
@@ -259,14 +258,24 @@ def span_is_quoted(text: str, start: int, end: int) -> bool:
     return before == after and before in QUOTE_CHARS
 
 
-def context_is_assignment(text: str, start: int) -> bool:
-    """Return True if the text immediately before the span looks like an assignment."""
+ASSIGNMENT_KEY_RE = r"[A-Za-z0-9_\-\.]+"
+ASSIGNMENT_OP = r"(?:[:=])"
 
-    prefix = text[max(0, start - 120) : start]
+
+def context_is_assignment(text: str, start: int) -> bool:
+    """Return True if the current line before the span looks like an assignment.
+
+    Only the current line is considered. Looking further back would cross
+    newlines and treat an unrelated `=` or `:` at the end of a previous line as
+    an assignment operator for this span.
+    """
+
+    line_start = text.rfind("\n", 0, start) + 1
+    prefix = text[line_start:start]
 
     return (
         re.search(
-            r"(?i)[A-Za-z0-9_\-\.]+\s*[:=]\s*['\"]?$",
+            rf"(?i){ASSIGNMENT_KEY_RE}\s*{ASSIGNMENT_OP}\s*['\"]?$",
             prefix,
         )
         is not None
