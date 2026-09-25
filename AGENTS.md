@@ -86,12 +86,26 @@ Loading is **fail-closed**: missing file, invalid YAML, non-mapping root, or
 schema violation all raise `ConfigError`, and CLI commands exit `2`. Protected
 operations must never proceed on an invalid policy.
 
+## Audit chain
+
+`.faraday/audit/events.jsonl` is an append-only SHA-256 hash chain; the head
+hash is cached in-process and invalidated by file size/mtime, so writes stay
+O(1) instead of O(n²).
+
+**Known limitation (documented, not a bug):** a bare hash chain detects edits,
+insertions, and *middle* deletions, but **not tail truncation** — deleting the
+last N events leaves a shorter yet internally consistent chain that still
+verifies. Detecting that needs the head hash anchored outside the log, which is
+what the Step 8 proof report must do. Do not overclaim tamper-proofing in the
+pitch; say "tamper-evident" and explain the anchoring.
+
+
 
 ## Build progress
 
 - [x] Step 1 — project foundation (structure, pyproject, CLI skeleton)
 - [x] Step 2 — configuration and policy model (`init`, `policy show/validate/path`)
-- [ ] Step 3 — session and audit chain
+- [x] Step 3 — session and audit chain (`audit show/verify/export`)
 - [ ] Step 4 — scanners
 - [ ] Step 5 — redaction engine
 - [ ] Step 6 — core CLI commands
