@@ -1,7 +1,7 @@
 [project]
 name = "faraday-gate"
 version = "0.1.0"
-description = "Zero-egress AI agent firewall for AI coding agents"
+description = "Zero-egress AI agent firewall for AI coding agents (Snapdragon AI Lab Build & Present Challenge)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

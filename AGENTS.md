@@ -142,5 +142,23 @@ pitch; say "tamper-evident" and explain the anchoring.
 - [x] Step 7 — agent wrapping (`wrap`, adapters, wrap engine)
 - [x] Step 8 — proof, dashboard, benchmark
 - [x] Step 9 — sample demo repository (`samples/repo`)
-- [ ] Step 10 — tests
-- [ ] Step 11 — submission and pitch
+- [x] Step 10 — tests (90 passing)
+- [x] Step 11 — submission and pitch (`README.md`, `docs/`)
+
+## Deliverable documents
+
+```
+README.md                # final, verified against the CLI
+docs/SUBMISSION.md       # submission form copy
+docs/PITCH.md            # 3-min pitch + final demo script
+docs/PITCH_DECK.md       # slide content
+docs/JUDGE_QNA.md        # judge Q&A with honest caveats
+docs/ROADMAP.md          # 4 phases
+docs/ARCHITECTURE.md     # implemented architecture
+docs/DESIGN.md           # design rationale
+docs/TECH_STACK.md       # dependencies and storage
+```
+
+Every command and flag referenced in these docs was executed against the real
+CLI before being documented. All 17 scanner rule names were verified to exist.
+Do not add claims that are not backed by a run or a code path.
