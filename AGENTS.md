@@ -107,7 +107,7 @@ pitch; say "tamper-evident" and explain the anchoring.
 - [x] Step 2 — configuration and policy model (`init`, `policy show/validate/path`)
 - [x] Step 3 — session and audit chain (`audit show/verify/export`)
 - [x] Step 4 — scanners (secrets, pii, injection, command guard, path rules, pipeline)
-- [ ] Step 5 — redaction engine
+- [x] Step 5 — redaction engine (placeholders, overlap-safe, syntax-preserving)
 - [ ] Step 6 — core CLI commands
 - [ ] Step 7 — agent wrapping
 - [ ] Step 8 — proof, dashboard, benchmark
