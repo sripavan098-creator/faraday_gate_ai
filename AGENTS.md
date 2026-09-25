@@ -106,7 +106,7 @@ pitch; say "tamper-evident" and explain the anchoring.
 - [x] Step 1 — project foundation (structure, pyproject, CLI skeleton)
 - [x] Step 2 — configuration and policy model (`init`, `policy show/validate/path`)
 - [x] Step 3 — session and audit chain (`audit show/verify/export`)
-- [ ] Step 4 — scanners
+- [x] Step 4 — scanners (secrets, pii, injection, command guard, path rules, pipeline)
 - [ ] Step 5 — redaction engine
 - [ ] Step 6 — core CLI commands
 - [ ] Step 7 — agent wrapping
