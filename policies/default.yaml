@@ -1,0 +1,46 @@
+policy_version: default-v1
+mode: strict-local
+
+
+paths:
+  allow: []
+  deny:
+    - .env
+    - .env.*
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/secrets/**"
+    - "~/.ssh/**"
+    - "~/.aws/**"
+
+
+redaction:
+  level: high
+  reversible: false
+  preserve_syntax: true
+
+
+secrets:
+  action: block
+
+
+pii:
+  action: redact
+
+
+prompt_injection:
+  action: block
+
+
+commands:
+  action: block
+
+
+network:
+  egress: deny
+
+
+audit:
+  hash_chain: true
+  sqlite: true
+  jsonl_export: true

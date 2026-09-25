@@ -60,15 +60,37 @@ python -m venv .venv
   collapses a single-command app into one command. `faraday/cli.py` therefore
   defines an explicit `@app.callback()`. Do not remove it or `faraday <command>`
   subcommands will stop working.
+- **Use `app.add_typer(...)`, not `app.add_subapp(...)`.** `add_subapp` is not a
+  Typer API; it fails at import time.
 - **Security**: all demo/sample secrets must be fake (`AKIAFAKEEXAMPLE123`,
   `sk_test_fake...`). Never commit real credentials or call external cloud APIs.
 - **CLI contract**: every command must support plain-text and `--format json`
   output for accessibility and scriptability.
 
+## Exit-code semantics
+
+```
+0 = success / valid
+1 = policy blocked operation
+2 = configuration/usage error
+3 = internal security subsystem error
+```
+
+## Configuration
+
+`.faraday/config.yaml` is the active policy; `.faraday/policies/default.yaml` is
+the reference copy written by `faraday init`. Both are typed by
+`faraday/core/policy.py` (Pydantic) and loaded via `faraday/config.py`.
+
+Loading is **fail-closed**: missing file, invalid YAML, non-mapping root, or
+schema violation all raise `ConfigError`, and CLI commands exit `2`. Protected
+operations must never proceed on an invalid policy.
+
+
 ## Build progress
 
 - [x] Step 1 — project foundation (structure, pyproject, CLI skeleton)
-- [ ] Step 2 — configuration and policy model
+- [x] Step 2 — configuration and policy model (`init`, `policy show/validate/path`)
 - [ ] Step 3 — session and audit chain
 - [ ] Step 4 — scanners
 - [ ] Step 5 — redaction engine
