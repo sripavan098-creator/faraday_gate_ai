@@ -48,3 +48,36 @@ include = ["faraday*"]
 # Scope collection to the project test suite. samples/repo is a fake demo
 # repository and must not be collected as part of the Faraday Gate tests.
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# The codebase consistently uses `typing.List` / `typing.Optional` rather than
+# PEP 585/604 built-in generics. That is a deliberate style choice, not an
+# oversight, so the UP family is off rather than half-applied.
+select = ["E", "F", "W", "I", "B"]
+ignore = [
+    # `raise typer.Exit(...)` inside `except ConfigError` is a control-flow
+    # signal that sets the process exit code, not an error being wrapped. The
+    # original message is already printed to the console above the raise, so
+    # chaining the exception would add no diagnostic value.
+    "B904",
+    # `typer.Option(...)` in a default argument is the documented Typer idiom.
+    # The call happens once at import time.
+    "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# AST fixtures are intentionally not valid standalone Python: they reference
+# `{user}` and `{SECRET}` to prove the AST redactor preserves f-string
+# interpolations. Undefined names here are the point of the fixture.
+"tests/fixtures/ast/*.py" = ["F821"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+files = ["faraday"]
+# yaml ships no type information by default; see the `dev` extra for stubs.
+disable_error_code = ["import-untyped"]

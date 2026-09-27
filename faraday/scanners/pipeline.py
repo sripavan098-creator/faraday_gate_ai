@@ -8,6 +8,7 @@ from faraday.scanners.command_guard import scan_command_guard
 from faraday.scanners.injection import scan_injection
 from faraday.scanners.pii import scan_pii
 from faraday.scanners.secrets import scan_secrets
+from faraday.scanners.semantic_leak import scan_semantic_leak
 
 
 def sort_findings(findings: List[ScanFinding]) -> List[ScanFinding]:
@@ -40,12 +41,15 @@ def scan_text(
     path: Optional[str] = None,
     policy: Optional[Policy] = None,
 ) -> List[ScanFinding]:
-    """Run deterministic text scanners.
+    """Run deterministic text scanners, then the heuristic reviewer.
 
-    Scanners included: secrets, PII / sensitive data, prompt injection.
+    Ordering is deliberate and is a security property: the deterministic
+    scanners (secrets, PII, prompt injection) run first. ``scan_semantic_leak``
+    runs last and can only *add* warnings. It cannot remove or downgrade a
+    deterministic `block`.
 
-    The policy argument is accepted for future use, but MVP scanners are
-    deterministic and do not require model inference.
+    No model inference is performed; the heuristic is pattern-based so results
+    stay reproducible offline.
     """
 
     findings: List[ScanFinding] = []
@@ -53,6 +57,7 @@ def scan_text(
     findings.extend(scan_secrets(text, origin=origin, path=path))
     findings.extend(scan_pii(text, origin=origin, path=path))
     findings.extend(scan_injection(text, origin=origin, path=path))
+    findings.extend(scan_semantic_leak(text, origin=origin, path=path))
 
     assign_line_numbers(text, findings)
 

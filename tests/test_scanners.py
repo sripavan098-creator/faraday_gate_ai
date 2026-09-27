@@ -1,4 +1,4 @@
-from faraday.scanners.base import ScanFinding, finding_to_session_kwargs, mask_value
+from faraday.scanners.base import finding_to_session_kwargs, mask_value
 from faraday.scanners.command_guard import scan_command_guard
 from faraday.scanners.injection import scan_injection
 from faraday.scanners.path_rules import is_denied_path, scan_path_denial

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
+from faraday.core.session import Severity
 from faraday.scanners.base import ScanFinding, line_of_index
 
-INJECTION_PATTERNS = [
+INJECTION_PATTERNS: List[Tuple[str, str, Severity]] = [
     (
         "ignore_instructions",
         r"(?i)ignore\s+(all\s+|any\s+)?(previous|prior|above)\s+instructions",
@@ -49,6 +50,45 @@ INJECTION_PATTERNS = [
 ]
 
 
+# Negated security prose is documentation, not an attack. "We never ignore
+# previous instructions" is a test assertion; "Ignore previous instructions" is
+# an attack. Without this guard the scanner fires on ordinary project docs and
+# unit-test fixtures, which trains users to bypass the firewall.
+#
+# The window is deliberately short (a few words immediately before the match)
+# so that an attacker cannot suppress a real payload by prefixing an unrelated
+# "never" far earlier in the text.
+_NEGATION = re.compile(
+    r"(?i)(?:\b(?:never|not|no|don't|doesn't|does\s+not|do\s+not|"
+    r"did\s+not|won't|will\s+not|shouldn't|should\s+not|must\s+not|"
+    r"avoid|avoiding|prevent|prevents|refuse|refuses)\b\W+){1,3}$"
+)
+
+# Rules where a leading negation changes the meaning to documentation. These
+# are the natural-language instruction rules. Exfiltration commands are not
+# included: "we never curl ..." inside a README is unusual enough that keeping
+# the deterministic deny is the safer default.
+_NEGATION_SENSITIVE_RULES = {
+    "ignore_instructions",
+    "disregard_instructions",
+    "read_env",
+    "read_ssh",
+    "reveal_environment_variables",
+    "override_security_policy",
+}
+
+
+def _is_negated(text: str, match_start: int, rule: str) -> bool:
+    """Return True when the match is preceded by a negating word."""
+
+    if rule not in _NEGATION_SENSITIVE_RULES:
+        return False
+
+    prefix = text[max(0, match_start - 40) : match_start]
+
+    return bool(_NEGATION.search(prefix))
+
+
 def scan_injection(
     text: str,
     origin: str,
@@ -67,6 +107,9 @@ def scan_injection(
 
     for rule, pattern, severity in INJECTION_PATTERNS:
         for match in re.finditer(pattern, text):
+            if _is_negated(text, match.start(), rule):
+                continue
+
             findings.append(
                 ScanFinding(
                     type="prompt_injection",

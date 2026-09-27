@@ -34,6 +34,8 @@ import time
 from dataclasses import dataclass, field
 from typing import List, Optional, Set, Tuple
 
+from faraday.core.session import EgressMethod
+
 _SAMPLE_INTERVAL_SECONDS = 0.05
 
 # Endpoints that are always noise: loopback and unspecified addresses.
@@ -71,7 +73,7 @@ class EgressResult:
         return "no-egress-observed"
 
     @property
-    def audit_method(self) -> str:
+    def audit_method(self) -> EgressMethod:
         """Return the `EgressMethod` literal describing how this was obtained."""
 
         return "measured-process" if self.available else "not-measured"

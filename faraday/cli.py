@@ -42,6 +42,7 @@ from faraday.core.proof import (
     proof_to_dict,
     render_proof,
 )
+from faraday.core.session import SessionStatus
 from faraday.core.wrap import run_wrap
 from faraday.redactor import redact_text
 from faraday.redactor.ast_redactor import (
@@ -437,7 +438,7 @@ def scan(
         finding for finding in findings if finding.recommended_action == "block"
     ]
 
-    status = "blocked" if blocked else "completed"
+    status: SessionStatus = "blocked" if blocked else "completed"
     finalize_session(chain, session, status=status)
 
     output_findings(findings, format)

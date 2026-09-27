@@ -113,9 +113,12 @@ def build_proof(chain: AuditChain, session_id: str = "latest") -> ProofReport:
     if session_id == "latest":
         row = sessions[0]
     else:
-        row = next((s for s in sessions if s["id"] == session_id), None)
+        row = next(
+            (s for s in sessions if s["id"] == session_id),
+            {},  # type: ignore[arg-type]
+        )
 
-        if row is None:
+        if not row:
             raise ProofError(f"Session not found: {session_id}")
 
     sid = str(row["id"])

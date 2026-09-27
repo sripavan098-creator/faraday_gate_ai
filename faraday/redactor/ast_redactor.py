@@ -20,7 +20,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from faraday.scanners.base import ScanFinding
 from faraday.redactor.text_redactor import (
     PlaceholderState,
     RedactionRecord,
@@ -29,6 +28,7 @@ from faraday.redactor.text_redactor import (
     is_redactable,
     placeholder_prefix,
 )
+from faraday.scanners.base import ScanFinding
 
 
 class RedactionValidationError(Exception):
@@ -191,6 +191,14 @@ class ASTRedactor:
 
         for finding in findings:
             if not is_redactable(finding, mode):
+                continue
+
+            # A finding without a span cannot be located in the syntax tree,
+            # so AST redaction cannot place a placeholder for it. Treat it as
+            # unredactable here and let the caller fall back to text redaction
+            # rather than crashing on a None offset.
+            if finding.start is None or finding.end is None:
+                blocked.append(finding)
                 continue
 
             prefix = placeholder_prefix(finding)

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
+from faraday.core.session import DecisionAction, Severity
 from faraday.scanners.base import ScanFinding, line_of_index
 
-PII_PATTERNS = [
+PII_PATTERNS: List[Tuple[str, str, Severity, DecisionAction]] = [
     (
         "email_address",
         r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
@@ -20,7 +21,8 @@ PII_PATTERNS = [
     ),
     (
         "account_identifier",
-        r"(?i)\b(account|acct|customer|patient|invoice|order)[ _-]?(id|number|no)?\b\s*[:=]\s*['\"]?[A-Za-z0-9_-]{6,}['\"]?",
+        r"(?i)\b(account|acct|customer|patient|invoice|order)[ _-]?(id|number|no)?\b"
+        r"\s*[:=]\s*['\"]?[A-Za-z0-9_-]{6,}['\"]?",
         "medium",
         "redact",
     ),

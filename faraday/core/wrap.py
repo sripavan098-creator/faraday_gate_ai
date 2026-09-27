@@ -17,6 +17,7 @@ from faraday.core.flow import (
     finalize_session,
 )
 from faraday.core.policy import Policy
+from faraday.core.session import EgressMethod, SessionStatus
 from faraday.models.local_model import MockLocalCoder
 from faraday.redactor import redact_text
 from faraday.redactor.text_redactor import RedactionRecord
@@ -31,7 +32,7 @@ WARN_ACTIONS = {"warn", "ask"}
 
 @dataclass
 class WrapResult:
-    status: str
+    status: SessionStatus
     exit_code: int
     adapter_name: str
     session_id: str
@@ -46,7 +47,7 @@ class WrapResult:
 
     files_scanned: int = 0
     prompt_tokens_scanned: int = 0
-    egress_method: str = "faraday-originated"
+    egress_method: EgressMethod = "faraday-originated"
 
 
 def policy_action_for(finding: ScanFinding, policy: Policy) -> str:
@@ -238,10 +239,10 @@ def run_wrap(
             append_redactions(chain, session, redaction_result.records)
 
     model = MockLocalCoder()
-    egress_method = "faraday-originated"
+    egress_method: EgressMethod = "faraday-originated"
     egress_result = None
     safe_output = ""
-    status = "completed"
+    status: SessionStatus = "completed"
     exit_code = 0
 
     if operation_blocked:
@@ -271,7 +272,6 @@ def run_wrap(
                 )
 
             egress_result = egress_monitor.result
-            egress_detail_label = egress_result.describe()
             # The audit `method` stays in the EgressMethod vocabulary;
             # `describe()` is only for display.
             egress_method = egress_result.audit_method
