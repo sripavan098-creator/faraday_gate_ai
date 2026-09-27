@@ -142,6 +142,54 @@ real `.faraday/config.yaml` through the same code path as `faraday init`.
 Protected commands fail closed without it, so a raw `tmp_path` is not enough
 for tests that exercise them.
 
+## Release gate
+
+Before pushing or merging a release branch, the full gate must pass:
+
+```bash
+pip install -e ".[dev]"   # installs everything the suite needs
+pytest -q
+ruff check .
+mypy
+bandit -r faraday -lll    # CI fails only on High severity
+pip-audit
+./scripts/smoke.sh
+./scripts/e2e.sh
+```
+
+`scripts/e2e.sh` is the real go/no-go check: it builds a throwaway hostile
+repository and asserts 20 behaviours. It asserts **exact exit codes**, not just
+non-zero, so a crash (2 or 3) cannot be mistaken for a deliberate block (1).
+
+**The `dev` extra must stay a superset of what the tests exercise.** Three
+separate red-suite bugs came from this: `.[dev]` alone failed on the AST
+redactor (needs tree-sitter) and on `wrap --execute` measurement (needs
+psutil). Those are shipped features with real tests, so their dependencies live
+in `dev`, not only in the `ast`/`egress` extras. A clean
+`pip install -e ".[dev]" && pytest` must be green with zero skips.
+
+Git hygiene: `.faraday/` (config, audit chain, cached policies), `reports/`,
+and `.env` are all gitignored. `samples/repo/.env.fake` is force-kept via a
+negation so the demo repo stays runnable.
+
+## Security tooling findings
+
+`bandit -r faraday -ll` reports 0 High, 1 Medium, 6 Low. The Medium is
+`B104` on `_IGNORED_IPS = {"127.0.0.1", "::1", "0.0.0.0", "::"}` in
+`egress_monitor.py` -- a false positive, that is a filter list, not a bind.
+The Low items are `try/except/pass` in the sampling loop (deliberate: a
+transient error must not abort a measurement) and subprocess notices for
+list-arg calls. `shell=True` appears nowhere. `pip-audit` is clean.
+
+## Web site (Vercel)
+
+`web/` is a static documentation site only. The CLI engine is never deployed.
+`report.js` renders `faraday prove --format json` client-side; it builds nodes
+with `textContent` because report fields derive from repository content and
+could contain markup. Never introduce `innerHTML` there. The CSP in
+`vercel.json` has no `unsafe-inline`, so `index.html` must have no inline
+handlers or `style=` attributes.
+
 ## Build progress
 
 - [x] Step 1 — project foundation (structure, pyproject, CLI skeleton)

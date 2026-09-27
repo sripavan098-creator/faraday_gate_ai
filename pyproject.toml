@@ -32,6 +32,20 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.4",
     "mypy>=1.10",
+    # Security tooling used by the release gate and CI. Pinned as extras so
+    # `pip install -e ".[dev]"` reproduces the documented security review.
+    "bandit>=1.7",
+    "pip-audit>=2.7",
+    # The AST-redaction tests require a grammar. Without these, `.[dev]` yields
+    # a red suite: the tests exercise a shipped feature, so they belong on the
+    # default developer install rather than behind the `ast` extra alone.
+    "tree-sitter>=0.21",
+    "tree-sitter-python>=0.21",
+    "tree-sitter-javascript>=0.21",
+    "tree-sitter-typescript>=0.21",
+    # `wrap --execute` tests assert the measured-egress path, which requires
+    # psutil. Same reasoning as the grammars above.
+    "psutil>=5.9",
 ]
 
 [project.scripts]

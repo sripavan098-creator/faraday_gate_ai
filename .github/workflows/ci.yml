@@ -80,3 +80,74 @@ jobs:
 
       - name: Audit chain verifies
         run: cd /tmp/demo && faraday audit verify
+
+  release-gate:
+    # The behavioural release gate: builds a throwaway hostile repository and
+    # asserts the security properties with exact exit codes. This is the check
+    # that must pass before a release branch is merged.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Smoke test
+        run: ./scripts/smoke.sh
+
+      - name: End-to-end release gate
+        run: ./scripts/e2e.sh
+
+  security:
+    # Static and dependency security checks. Fails on High-severity findings
+    # and on any secret-shaped string outside the sample/test/doc trees.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install project and security tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" bandit pip-audit
+
+      - name: Bandit (fail on High severity)
+        run: bandit -r faraday -lll -q
+
+      - name: Dependency audit
+        run: pip-audit
+
+      - name: Secret scan (AWS-style keys)
+        run: |
+          if git grep -nE "AKIA[0-9A-Z]{16}" -- ':!samples' ':!tests' ':!docs'; then
+            echo "::error::AWS-style key found outside samples/tests/docs"
+            exit 1
+          fi
+          echo "clean"
+
+      - name: Secret scan (live Stripe keys)
+        run: |
+          if git grep -nE "sk_live_[A-Za-z0-9]{10,}" -- ':!samples' ':!tests' ':!docs'; then
+            echo "::error::live Stripe key found outside samples/tests/docs"
+            exit 1
+          fi
+          echo "clean"
+
+      - name: Secret scan (private key blocks)
+        run: |
+          if git grep -nE "BEGIN[A-Z ]*PRIVATE KEY-----" -- ':!samples' ':!tests' ':!docs'; then
+            echo "::error::private key block found outside samples/tests/docs"
+            exit 1
+          fi
+          echo "clean"
