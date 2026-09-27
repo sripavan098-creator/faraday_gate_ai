@@ -1,5 +1,10 @@
 from faraday.core.audit import AuditChain
-from faraday.core.proof import ProofError, build_proof, label_egress
+from faraday.core.proof import (
+    ProofError,
+    build_proof,
+    format_proof_plain,
+    label_egress,
+)
 from faraday.core.session import create_session
 
 
@@ -198,6 +203,89 @@ def test_label_egress_unknown_method():
 
     assert "not recorded" in label
     assert details
+
+
+def test_label_egress_measured_process_states_polling_caveat():
+    label, details = label_egress("measured-process")
+
+    assert "measured" in label.lower()
+    # The label must not let a reader treat sampling as interception.
+    assert "polling" in details.lower()
+    assert "none observed" in details
+
+
+def test_label_egress_measured_process_is_distinct_from_no_measurement():
+    measured_label, _ = label_egress("measured-process")
+    unmeasured_label, _ = label_egress("not-measured")
+
+    assert measured_label != unmeasured_label
+
+
+def test_build_proof_surfaces_observed_egress_connections(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    chain = AuditChain()
+    session = create_session(
+        tool="wrap", mode="sanitize-external", policy_version="default-v1"
+    )
+
+    chain.append(
+        session_id=session.id,
+        event="egress_observation",
+        metadata={
+            "method": "measured-process",
+            "external_requests": 1,
+            "bytes_sent": 0,
+            "details": "observed",
+            "new_connections": [
+                {"local_port": 49804, "remote_ip": "1.1.1.1", "remote_port": 443}
+            ],
+            "samples": 12,
+        },
+    )
+
+    session.finish(status="completed")
+    session.audit_head = chain.head_hash()
+    chain.save_session(session)
+
+    report = build_proof(chain, "latest")
+
+    assert report.egress_method == "measured-process"
+    assert report.egress_observed_connections == ["1.1.1.1:443"]
+
+    rendered = format_proof_plain(report)
+
+    assert "1.1.1.1:443" in rendered
+
+
+def test_build_proof_reports_none_observed_without_connections(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    chain = AuditChain()
+    session = create_session(
+        tool="wrap", mode="sanitize-external", policy_version="default-v1"
+    )
+
+    chain.append(
+        session_id=session.id,
+        event="egress_observation",
+        metadata={
+            "method": "measured-process",
+            "external_requests": 0,
+            "new_connections": [],
+            "samples": 9,
+        },
+    )
+
+    session.finish(status="completed")
+    session.audit_head = chain.head_hash()
+    chain.save_session(session)
+
+    report = build_proof(chain, "latest")
+
+    assert report.egress_method == "measured-process"
+    assert report.egress_observed_connections == []
+    assert "none observed" in format_proof_plain(report)
 
 
 def test_proof_is_json_serializable(tmp_path):

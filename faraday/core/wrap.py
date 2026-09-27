@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple
 
 from faraday.adapters.registry import get_adapter
 from faraday.core.audit import AuditChain
+from faraday.core.egress_monitor import EgressMonitor, format_endpoints
 from faraday.core.flow import (
     add_scan_findings,
     append_findings,
@@ -238,6 +239,7 @@ def run_wrap(
 
     model = MockLocalCoder()
     egress_method = "faraday-originated"
+    egress_result = None
     safe_output = ""
     status = "completed"
     exit_code = 0
@@ -256,16 +258,23 @@ def run_wrap(
         exit_code = 1
 
     elif execute and policy.mode != "strict-local":
-        egress_method = "not-measured"
+        egress_result = None
 
         try:
-            completed = subprocess.run(
-                command,
-                cwd=workdir,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            with EgressMonitor() as egress_monitor:
+                completed = subprocess.run(
+                    command,
+                    cwd=workdir,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+            egress_result = egress_monitor.result
+            egress_detail_label = egress_result.describe()
+            # The audit `method` stays in the EgressMethod vocabulary;
+            # `describe()` is only for display.
+            egress_method = egress_result.audit_method
         except FileNotFoundError:
             safe_output = f"Command not found: {command[0]}"
             status = "error"
@@ -384,14 +393,59 @@ def run_wrap(
         egress_details = (
             "No external request was made by Faraday. Local/simulated path only."
         )
+    elif egress_method == "measured-process":
+        if egress_result is not None and egress_result.new_connections:
+            egress_details = (
+                "Sampled sockets around the wrapped process and observed "
+                f"{len(egress_result.new_connections)} new connection(s): "
+                f"{format_endpoints(egress_result.new_connections)}. "
+                "Detection is polling-based. Use strict-local mode to forbid "
+                "external execution entirely."
+            )
+        else:
+            samples = egress_result.samples if egress_result else 0
+            egress_details = (
+                "Sampled sockets around the wrapped process "
+                f"({samples} samples); no new connections observed. "
+                "Absence of observation is not proof of absence: connections "
+                "shorter than the sampling interval can be missed. Use "
+                "strict-local mode to forbid external execution entirely."
+            )
+    elif egress_method == "not-measured":
+        egress_details = (
+            "External process executed. Socket sampling was unavailable, so "
+            "egress was not measured."
+        )
     else:
-        egress_details = "External process executed. Egress was not measured in this MVP."
+        egress_details = (
+            "External process executed. Egress was not measured in this MVP."
+        )
 
-    session.add_egress_observation(
+    observation = session.add_egress_observation(
         method=egress_method,
-        external_requests=0,
+        external_requests=(
+            len(egress_result.new_connections) if egress_result else 0
+        ),
         bytes_sent=0,
         details=egress_details,
+    )
+
+    chain.append(
+        session_id=session.id,
+        event="egress_observation",
+        metadata={
+            "method": observation.method,
+            "external_requests": observation.external_requests,
+            "bytes_sent": observation.bytes_sent,
+            "details": observation.details,
+            "new_connections": [
+                {"local_port": lp, "remote_ip": ip, "remote_port": rp}
+                for lp, ip, rp in (
+                    egress_result.new_connections if egress_result else []
+                )
+            ],
+            "samples": egress_result.samples if egress_result else 0,
+        },
     )
 
     chain.append(

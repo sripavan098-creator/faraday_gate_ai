@@ -162,3 +162,55 @@ docs/TECH_STACK.md       # dependencies and storage
 Every command and flag referenced in these docs was executed against the real
 CLI before being documented. All 17 scanner rule names were verified to exist.
 Do not add claims that are not backed by a run or a code path.
+
+## Phase 1 & 5 status (AST redaction, egress measurement)
+
+Both are now implemented and tested. Test suite: `117 passing`.
+
+### AST-aware redaction (`faraday/redactor/ast_redactor.py`)
+
+The text redactor (`text_redactor.py`) corrupts structured code: an f-string
+such as `f"postgres://{user}:{SECRET}@localhost/db"` was rewritten to
+`f"[SECRET_1]"`, destroying the interpolations. The AST redactor edits only
+`string_content` node ranges via tree-sitter, so quoting, prefixes (`f`, `r`),
+and `{interpolation}` expressions survive. It re-parses its own output on
+Python and raises `RedactionValidationError` when the input does not parse or
+no grammar is available.
+
+`faraday/cli.py::_redact_source` prefers AST redaction when the path maps to a
+known grammar, and falls back to `redact_text` otherwise (stdin, `.env`,
+config files). The AST redactor is *not* general-purpose: use it only for real
+source files.
+
+### Egress measurement (`faraday/core/egress_monitor.py`)
+
+`wrap --execute` previously hardcoded `egress_method = "not-measured"`. It now
+samples `psutil.net_connections(kind="inet")` in a background thread around the
+subprocess and reports `measured-process`.
+
+Two things that are easy to get wrong here:
+
+1. Connections are keyed by `(local_port, remote_ip, remote_port)`, not by
+   remote endpoint alone. Keying on the remote endpoint hides a *repeat*
+   connection to an endpoint already in the baseline snapshot.
+2. The stored audit value stays inside the `EgressMethod` literal set
+   (`measured-process`). `EgressResult.describe()` is a *display* string
+   (`egress-observed` / `no-egress-observed`) and must not be stored as
+   `method` -- doing so raises a pydantic validation error in
+   `Session.add_egress_observation`.
+
+Measurement is polling-based, so a connection opening and closing between
+samples can be missed. This limitation is stated in the proof report and must
+not be softened: "none observed" never means "none happened". Faraday does not
+block network access at the OS level in this MVP.
+
+`wrap` now emits an `egress_observation` audit event, and `proof` reads it to
+surface observed remote endpoints.
+
+### Optional dependency extras
+
+`ast`, `ai`, and `egress` extras in `pyproject.toml` are not installed in the
+default environment. Code paths that need them must degrade gracefully
+(`ASTRedactor.available`, `probe_available()`) rather than import at module
+level.
+

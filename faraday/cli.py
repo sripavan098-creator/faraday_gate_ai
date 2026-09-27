@@ -44,6 +44,11 @@ from faraday.core.proof import (
 )
 from faraday.core.wrap import run_wrap
 from faraday.redactor import redact_text
+from faraday.redactor.ast_redactor import (
+    ASTRedactor,
+    RedactionValidationError,
+    language_for_path,
+)
 from faraday.scanners.base import ScanFinding
 from faraday.scanners.files import read_git_diff, scan_path
 from faraday.scanners.path_rules import scan_path_denial
@@ -451,6 +456,38 @@ def scan(
         raise typer.Exit(code=1)
 
 
+def _redact_source(
+    text: str,
+    findings: List[ScanFinding],
+    mode: str = "sensitive",
+    path: Optional[str] = None,
+):
+    """Redact source text, preferring AST redaction for supported languages.
+
+    AST redaction preserves quoting, string prefixes, and interpolations, and
+    validates that the result still parses. It is used only when the file has a
+    known grammar and the input already parses; anything else falls back to the
+    heuristic text redactor.
+    """
+
+    if path:
+        language = language_for_path(path)
+
+        if language:
+            redactor = ASTRedactor(language)
+
+            if redactor.available:
+                try:
+                    return redactor.redact(text, findings, mode=mode)
+                except RedactionValidationError as exc:
+                    console.print(
+                        f"[yellow]AST redaction unavailable ({exc}); "
+                        "falling back to text redaction.[/yellow]"
+                    )
+
+    return redact_text(text, findings, mode=mode)
+
+
 @app.command()
 def redact(
     file: Optional[str] = typer.Argument(
@@ -546,7 +583,7 @@ def redact(
     append_findings(chain, session, findings)
 
     try:
-        result = redact_text(text, findings, mode=mode)
+        result = _redact_source(text, findings, mode=mode, path=path_value)
     except ValueError as exc:
         console.print(f"[red]Redaction error:[/red] {exc}")
         raise typer.Exit(code=2)
