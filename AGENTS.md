@@ -131,6 +131,17 @@ pitch; say "tamper-evident" and explain the anchoring.
 
 
 
+## Tests
+
+`tests/` holds 242 tests: scanner unit tests, redaction, audit chain, golden
+fixtures for `samples/repo`, CLI smoke tests over every command (asserting the
+exit-code contract), adversarial payloads, and gate-mode semantics.
+
+Test files use the `workspace` fixture from `tests/conftest.py`, which writes a
+real `.faraday/config.yaml` through the same code path as `faraday init`.
+Protected commands fail closed without it, so a raw `tmp_path` is not enough
+for tests that exercise them.
+
 ## Build progress
 
 - [x] Step 1 — project foundation (structure, pyproject, CLI skeleton)
@@ -142,7 +153,7 @@ pitch; say "tamper-evident" and explain the anchoring.
 - [x] Step 7 — agent wrapping (`wrap`, adapters, wrap engine)
 - [x] Step 8 — proof, dashboard, benchmark
 - [x] Step 9 — sample demo repository (`samples/repo`)
-- [x] Step 10 — tests (90 passing)
+- [x] Step 10 — tests (242 passing)
 - [x] Step 11 — submission and pitch (`README.md`, `docs/`)
 
 ## Deliverable documents
@@ -163,9 +174,44 @@ Every command and flag referenced in these docs was executed against the real
 CLI before being documented. All 17 scanner rule names were verified to exist.
 Do not add claims that are not backed by a run or a code path.
 
-## Phase 1 & 5 status (AST redaction, egress measurement)
+## Protection modes
 
-Both are now implemented and tested. Test suite: `117 passing`.
+Three modes are defined by `mode_policy()` in `faraday/core/policy.py`, which is
+the single source of truth. `faraday init --preset <mode>` and
+`faraday gate --mode <mode>` both route through it, so the two documented ways
+of choosing a mode cannot drift apart.
+
+| Mode | Egress | Secrets | PII | Injection | Commands |
+|---|---|---|---|---|---|
+| `strict-local` (default) | deny | block | redact | block | block |
+| `sanitize-external` | allow | block | redact | block | block |
+| `observe-only` | deny | warn | warn | warn | warn |
+
+Path deny rules and the audit chain stay active in every mode.
+
+**Gotcha that had already shipped a bug:** scanning functions accept a `policy`
+argument but the scanners return a *hardcoded* `recommended_action`. Blocking
+must therefore be decided with `classify_findings(findings, policy)`
+(`faraday/core/wrap.py`), not by testing `finding.recommended_action == "block"`.
+Doing the latter made `observe-only` silently hard-block on secrets, ignoring the
+policy the user selected. `scan` and `wrap` now share the helper; any new
+command that reports a block decision must use it too.
+
+## Tooling
+
+`ruff` and `mypy` configs live in `pyproject.toml`; both must pass, and CI
+(`.github/workflows/ci.yml`) enforces them plus the test suite on 3.10-3.12.
+The demo job in CI asserts the block/pass exit codes from a clean install, so a
+change that breaks the on-stage demo fails the build.
+
+Scanner pattern tables are annotated with the `Severity` / `DecisionAction`
+literals from `faraday/core/session.py`. Annotating the tables (rather than
+casting at the call site) is what keeps mypy useful for detecting a typo'd
+severity in a new rule.
+
+
+
+Both are now implemented and tested. Test suite: `242 passing`.
 
 ### AST-aware redaction (`faraday/redactor/ast_redactor.py`)
 
