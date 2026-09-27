@@ -95,6 +95,7 @@ relative to that directory.
 | `faraday scan` | Scan files, directories, prompts, or git diffs |
 | `faraday redact` | Print syntax-preserving redacted output |
 | `faraday wrap -- <cmd>` | Run an AI CLI tool under Faraday Gate protection |
+| `faraday init --preset <mode>` | Initialize with a mode preset |
 | `faraday gate --mode strict-local` | Set the active protection mode |
 | `faraday policy show` | Show active policy |
 | `faraday policy validate` | Validate the policy file |
@@ -204,6 +205,32 @@ Snapdragon-powered HP PCs are the right platform for this because the privacy st
 It is an architectural property.
 
 The current MVP benchmarks deterministic scanners and provides integration points for future local model backends, including ONNX Runtime, llama.cpp, and Snapdragon-compatible runtimes where verified.
+
+---
+
+## Protection Modes
+
+Faraday Gate has three modes. Each is available as a starter policy via
+`faraday init --preset <mode>` or by switching an initialized repo with
+`faraday gate --mode <mode>`. Both paths produce the same policy.
+
+| Mode | Egress | Secrets | PII | Injection | Commands |
+|---|---|---|---|---|---|
+| `strict-local` (default) | deny | block | redact | block | block |
+| `sanitize-external` | allow | block | redact | block | block |
+| `observe-only` | deny | warn | warn | warn | warn |
+
+`sanitize-external` is for the case where an external call is intended: the
+payload must be sanitized first, so secrets still block rather than being sent
+in redacted form.
+
+`observe-only` is for evaluating Faraday against a real repository before
+enforcing: every detection is recorded and reported, nothing is blocked. It
+does not enable egress, because it changes enforcement, not connectivity.
+
+Path deny rules and the audit chain are active in **all** modes. `network.egress`
+is a Faraday-level policy statement and is reported as an application-level
+observation — none of these modes claim OS-level network isolation.
 
 ---
 
