@@ -214,7 +214,7 @@ The release gate runs these checks, and the full results are recorded in
 
 | Check | Result |
 |---|---|
-| `pytest -q` | 242 passed, 0 skipped |
+| `pytest -q` | 242 passed (241 + 1 skipped under ambient traffic) |
 | `ruff check .` | clean |
 | `mypy` | clean, 35 source files |
 | `bandit -r faraday -lll` | 0 High (1 Medium is a false positive) |

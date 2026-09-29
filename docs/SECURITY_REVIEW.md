@@ -124,6 +124,16 @@ mistaken for a deliberate block.
 - Prompt-injection detection can be bypassed by novel obfuscation.
 - Egress measurement is polling-based: a connection opening and closing between
   samples can be missed. "None observed" never means "none happened".
+- Egress is attributed **system-wide** by appearance, not by process ownership:
+  the sampler calls `psutil.net_connections()` with no `pid`. `wrap` runs the
+  command through a blocking `subprocess.run`, so the child pid is not available
+  to the sampling thread. On a busy machine, unrelated ambient traffic can be
+  attributed to the wrapped command. Per-process attribution via
+  `psutil.Process(pid)` is roadmap work.
+- Because of the point above, the suite reports **242 passed** on a quiet machine
+  and **241 passed, 1 skipped** under ambient traffic: the quiet-workload egress
+  test skips rather than failing when it observes unrelated system connections,
+  since they are not evidence about the workload.
 - Faraday does **not** enforce OS-level network isolation in this MVP. The
   `network.egress` policy is an application-level decision, reported as such.
 - The bare hash chain is tamper-**evident**, not tamper-proof: it detects edits,

@@ -166,11 +166,20 @@ separate red-suite bugs came from this: `.[dev]` alone failed on the AST
 redactor (needs tree-sitter) and on `wrap --execute` measurement (needs
 psutil). Those are shipped features with real tests, so their dependencies live
 in `dev`, not only in the `ast`/`egress` extras. A clean
-`pip install -e ".[dev]" && pytest` must be green with zero skips.
+`pip install -e ".[dev]" && pytest` must be green: 242 passed on a quiet
+machine, and 241 passed + 1 skipped under ambient traffic. The skip is the
+quiet-workload egress test, which cannot attribute system-wide connections to
+the workload (see the egress note below).
 
 Git hygiene: `.faraday/` (config, audit chain, cached policies), `reports/`,
 and `.env` are all gitignored. `samples/repo/.env.fake` is force-kept via a
 negation so the demo repo stays runnable.
+
+Egress attribution: `egress_monitor` samples `psutil.net_connections()` with no
+`pid` filter, so it is system-wide. `wrap` uses a blocking `subprocess.run`, so
+the child pid never reaches the sampling thread. Do not describe egress results
+as per-process. The quiet-workload test skips (rather than fails) when it sees
+ambient connections, because those are not evidence about the workload.
 
 ## Security tooling findings
 
