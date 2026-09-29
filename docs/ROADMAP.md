@@ -27,17 +27,25 @@ Included:
 
 ## Phase 2 — Hard Build
 
+Status: partially implemented in this build. Items marked **shipped** are in the
+code today and covered by tests; the rest remain open.
+
 Goals:
 
-- tree-sitter AST-aware redaction
-- syntax validation after redaction
+- tree-sitter AST-aware redaction — **shipped** (`faraday/redactor/ast_redactor.py`)
+- syntax validation after redaction — **shipped** (the redactor re-parses and
+  raises rather than emitting invalid output)
+- semantic leak detector — **shipped as deterministic heuristics**
+  (`faraday/scanners/semantic_leak.py`); a learned version remains roadmap
 - sanitized workspace mode
 - local classifier integration
 - local embedding index
-- semantic leak detector
 - stronger action guard rules
 - reversible encrypted redaction vault
 - keyed (HMAC) audit chain and external anchoring
+
+Also shipped ahead of this phase: real process-based egress measurement
+(`faraday/core/egress_monitor.py`).
 
 ---
 

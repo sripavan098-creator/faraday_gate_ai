@@ -209,9 +209,10 @@ Phase 1:
 
 - competition MVP
 
-Phase 2:
+Phase 2 (partly shipped already):
 
-- AST-aware redaction
+- AST-aware redaction — shipped
+- semantic leak heuristics — shipped
 - sanitized workspace
 - local classifiers
 - action guard expansion
