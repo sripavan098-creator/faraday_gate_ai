@@ -1,229 +1,114 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Faraday Gate — zero-egress AI agent firewall</title>
-    <meta
-      name="description"
-      content="Faraday Gate is a CLI-native, local-first AI agent firewall that blocks secret leakage and prompt injection in AI coding workflows."
-    />
-    <link rel="stylesheet" href="styles.css" />
-    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-  </head>
-  <body>
-    <a class="skip" href="#main">Skip to content</a>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Faraday Gate — zero-egress AI agent firewall</title>
+<meta name="description" content="A CLI-native, local-first firewall between your repository and your AI coding agent.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="vendor/fonts.css">
+<link rel="stylesheet" href="landing.css">
+</head>
+<body>
+<canvas id="gl" aria-hidden="true"></canvas>
+<div class="scan" aria-hidden="true"></div>
+<div class="fr" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span></div>
 
-    <header class="site-header">
-      <div class="wrap header-inner">
-        <span class="brand">Faraday Gate</span>
-        <nav aria-label="Sections">
-          <a href="#problem">Problem</a>
-          <a href="#how">How it works</a>
-          <a href="#commands">Commands</a>
-          <a href="#report">Report viewer</a>
-          <a href="#security">Security</a>
-        </nav>
-      </div>
-    </header>
+<a class="skip" href="#manual">Skip to content</a>
 
-    <main id="main">
-      <section class="hero">
-        <div class="wrap">
-          <p class="badge">Snapdragon AI Lab Build &amp; Present Challenge</p>
-          <h1>Your agents. Your code. <span class="no-leak">No leaks.</span></h1>
-          <p class="lede">
-            Faraday Gate is a CLI-native firewall that sits between your repository and
-            your AI coding agent. It detects secrets, PII, and prompt injection, blocks or
-            redacts them, and records every decision in a tamper-evident audit chain.
-          </p>
-          <p class="lede sub">
-            Local-first. No cloud service. Deterministic scanning you can verify.
-          </p>
-          <div class="actions">
-            <a class="button" href="https://github.com/sripavan098-creator/faraday_gate_ai">
-              View on GitHub
-            </a>
-            <a class="button ghost" href="#commands">See the commands</a>
-            <a class="button ghost" href="#report">Open report viewer</a>
-          </div>
-        </div>
-      </section>
+<div class="bar">
+  <b>FARADAY//GATE</b>
+  <span class="st"><i class="dot"></i>FIREWALL ACTIVE · POLICY strict-local · EGRESS DENY</span>
+  <span id="clk">--:--:--</span>
+</div>
 
-      <section id="problem" class="wrap">
-        <h2>The problem</h2>
-        <p>
-          AI coding agents are useful precisely because they get repository context. That
-          context is where the secrets live: API keys, database credentials, private keys,
-          customer data, and proprietary logic.
-        </p>
-        <p>
-          And repository content is untrusted input. A <code>README</code> or a dependency
-          file can contain instructions aimed at the agent rather than the developer —
-          telling it to read <code>.env</code> and include the contents in its response, or
-          to run a command that ships data out.
-        </p>
-        <div class="grid">
-          <article class="card">
-            <h3>Leakage</h3>
-            <p>Credentials and customer data enter a prompt because nothing checked first.</p>
-          </article>
-          <article class="card">
-            <h3>Injection</h3>
-            <p>Hidden instructions in repo files redirect what the agent does with them.</p>
-          </article>
-          <article class="card">
-            <h3>No evidence</h3>
-            <p>When something does go wrong, there is no record of what was allowed.</p>
-          </article>
-        </div>
-      </section>
+<div class="hud" aria-hidden="true">Simulation · <span class="x">blocked <b id="nb">0</b></span> · passed <b id="np">0</b> · chain <b id="hh">--------</b></div>
 
-      <section id="how" class="wrap">
-        <h2>How it works</h2>
-        <p>
-          Faraday Gate wraps the agent invocation. Nothing reaches the agent until the
-          payload has been scanned and classified against your policy.
-        </p>
-        <pre class="diagram"><code>Developer prompt / repository context
-        │
-        ▼
-Context collector ── prompt, files, git diff, repo scan
-        │
-        ▼
-Policy engine ────── strict-local · sanitize-external · observe-only
-        │
-        ▼
-Scanners ─────────── secrets · PII · injection · command guard · path denial
-        │
-        ▼
-Decision ─────────── allow · redact · block
-        │
-        ├──▶ blocked ──▶ explain why, exit 1, nothing sent
-        │
-        └──▶ allowed ──▶ redactor ──▶ agent invocation
-                                        │
-                                        ▼
-                             output scan ──▶ audit chain</code></pre>
-        <p class="note">
-          In this MVP the local model activity is labeled as simulated, and egress is
-          reported as an application-level observation. Faraday does not enforce OS-level
-          network isolation.
-        </p>
-      </section>
+<div class="feed" id="feed" aria-hidden="true"></div>
 
-      <section id="commands" class="wrap">
-        <h2>Commands</h2>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr><th>Command</th><th>Purpose</th></tr>
-            </thead>
-            <tbody>
-              <tr><td><code>faraday init</code></td><td>Initialize local config and audit structure</td></tr>
-              <tr><td><code>faraday doctor</code></td><td>Check environment and optional dependencies</td></tr>
-              <tr><td><code>faraday scan</code></td><td>Scan files, directories, prompts, or a git diff</td></tr>
-              <tr><td><code>faraday redact</code></td><td>Emit syntax-preserving redacted output</td></tr>
-              <tr><td><code>faraday wrap</code></td><td>Run an AI CLI tool under protection</td></tr>
-              <tr><td><code>faraday policy</code></td><td>Show or validate the active policy</td></tr>
-              <tr><td><code>faraday audit verify</code></td><td>Verify the SHA-256 audit hash chain</td></tr>
-              <tr><td><code>faraday prove</code></td><td>Generate a proof report with limitations stated</td></tr>
-              <tr><td><code>faraday dashboard</code></td><td>Render a terminal dashboard</td></tr>
-            </tbody>
-          </table>
-        </div>
+<main>
+<section class="ch hero">
+  <div class="tx" data-h="$ faraday wrap --scan-repo -- qwen-coder">
+    <h1><span class="dc">Your agents.</span><br><span class="dc">Your code.</span><br><em class="dc">No leaks.</em></h1>
+    <p>A CLI-native firewall between your repository and your AI coding agent. It detects secrets, PII and prompt injection, blocks or redacts them, and logs every decision in a tamper-evident audit chain. Local-first. No cloud service.</p>
+    <div class="chips">
+      <span>SECRETS ▸ BLOCK</span><span>INJECTION ▸ BLOCK</span><span>EGRESS ▸ DENY</span><span>AUDIT ▸ SHA-256</span>
+    </div>
+    <a class="go" href="https://github.com/sripavan098-creator/faraday_gate_ai">View on GitHub →</a>
+  </div>
+</section>
 
-        <h3>Modes</h3>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr><th>Mode</th><th>Egress</th><th>Secrets</th><th>PII</th><th>Injection</th><th>Commands</th></tr>
-            </thead>
-            <tbody>
-              <tr><td><code>strict-local</code></td><td>deny</td><td>block</td><td>redact</td><td>block</td><td>block</td></tr>
-              <tr><td><code>sanitize-external</code></td><td>allow</td><td>block</td><td>redact</td><td>block</td><td>block</td></tr>
-              <tr><td><code>observe-only</code></td><td>deny</td><td>warn</td><td>warn</td><td>warn</td><td>warn</td></tr>
-            </tbody>
-          </table>
-        </div>
+<section class="ch">
+  <div class="tx" data-h="// threat model · 01">
+    <h2 class="dc">Context is where the secrets live.</h2>
+    <p>Agents are useful because they get repository context: API keys, database credentials, private keys, customer data.</p>
+    <p>That content is untrusted input. A README can tell the agent to read <code>.env</code> and put it in its reply. And when something goes wrong, nothing records what was allowed.</p>
+  </div>
+</section>
 
-        <h3>Demo flow</h3>
-        <pre class="terminal"><code><span class="c">$</span> faraday init --preset strict-local
-<span class="c">$</span> faraday scan samples/repo
-<span class="bad">BLOCKED</span>  secret  samples/repo/src/config.py
-<span class="c">$</span> faraday redact samples/repo/src/config.py
-STRIPE_SECRET_KEY = "[SECRET_1]"
-DATABASE_URL = "[SECRET_2]"
-<span class="c">$</span> faraday wrap --workdir samples/repo --scan-repo -- qwen-coder "Fix the login bug"
-<span class="bad">BLOCKED</span>  prompt injection found in repository content
-<span class="c">$</span> faraday audit verify
-<span class="good">OK</span>      hash chain valid
-<span class="c">$</span> faraday prove latest</code></pre>
-      </section>
+<section class="ch r">
+  <div class="tx" data-h="// inspection pipeline · 02">
+    <h2 class="dc">Nothing reaches the agent unscanned.</h2>
+    <ul>
+      <li><b>01</b>Collect prompt, files, git diff, repo scan</li>
+      <li><b>02</b>Policy: strict-local · sanitize-external · observe-only</li>
+      <li><b>03</b>Scan: secrets · PII · injection · command guard · path denial</li>
+      <li><b>04</b>Decide: allow · redact · block (exit 1, nothing sent)</li>
+      <li><b>05</b>Scan output, append to the SHA-256 audit chain</li>
+    </ul>
+  </div>
+</section>
 
-      <section id="report" class="wrap">
-        <h2>Proof report viewer</h2>
-        <p>
-          Paste the JSON from <code>faraday prove latest --format json</code> to read it as
-          a report. This runs entirely in your browser: nothing is uploaded, and no data
-          leaves this page.
-        </p>
-        <label class="sr-only" for="report-input">Proof report JSON</label>
-        <textarea
-          id="report-input"
-          spellcheck="false"
-          placeholder='{ "session": { ... } }  — run: faraday prove latest --format json'
-        ></textarea>
-        <div class="actions">
-          <button class="button" id="render-report" type="button">Render report</button>
-          <button class="button ghost" id="load-sample" type="button">Load sample</button>
-          <button class="button ghost" id="clear-report" type="button">Clear</button>
-        </div>
-        <div id="report-status" class="note" role="status" aria-live="polite"></div>
-        <div id="report-output" class="report" aria-live="polite"></div>
-      </section>
+<section class="doc" id="manual">
+<div class="in">
+  <h2>Manual</h2>
+  <div class="tw"><table>
+    <tr><td>faraday init</td><td>Initialize local config and audit structure</td></tr>
+    <tr><td>faraday doctor</td><td>Check environment and optional dependencies</td></tr>
+    <tr><td>faraday scan</td><td>Scan files, directories, prompts, or a git diff</td></tr>
+    <tr><td>faraday redact</td><td>Emit syntax-preserving redacted output</td></tr>
+    <tr><td>faraday wrap</td><td>Run an AI CLI tool under protection</td></tr>
+    <tr><td>faraday policy</td><td>Show or validate the active policy</td></tr>
+    <tr><td>faraday audit verify</td><td>Verify the SHA-256 audit hash chain</td></tr>
+    <tr><td>faraday prove</td><td>Generate a proof report with limitations stated</td></tr>
+    <tr><td>faraday dashboard</td><td>Render a terminal dashboard</td></tr>
+  </table></div>
 
-      <section id="security" class="wrap">
-        <h2>Security statement</h2>
-        <p class="statement">
-          Faraday Gate is a defense-in-depth security layer. It reduces accidental leakage
-          and prompt-injection risk. It is not a mathematical guarantee of perfect security.
-        </p>
-        <ul class="facts">
-          <li>All sample credentials are fake and obviously so.</li>
-          <li>All sample attacker domains use reserved example domains.</li>
-          <li>Wrapped commands run with list arguments — <code>shell=True</code> is used nowhere.</li>
-          <li>Protected operations fail closed: an invalid policy stops the operation.</li>
-          <li>Exit codes distinguish a policy block (1) from a configuration error (2) and an internal failure (3).</li>
-          <li>The audit chain is tamper-evident. Tail truncation is a documented limitation.</li>
-        </ul>
-        <p>
-          <a href="https://github.com/sripavan098-creator/faraday_gate_ai/blob/main/docs/SECURITY_REVIEW.md">
-            Read the full security review and risk register
-          </a>
-        </p>
-      </section>
+  <h2>Modes</h2>
+  <div class="tw"><table>
+    <tr><th>mode</th><th>egress</th><th>secrets</th><th>PII</th><th>injection</th><th>commands</th></tr>
+    <tr><td>strict-local</td><td>deny</td><td>block</td><td>redact</td><td>block</td><td>block</td></tr>
+    <tr><td>sanitize-external</td><td>allow</td><td>block</td><td>redact</td><td>block</td><td>block</td></tr>
+    <tr><td>observe-only</td><td>deny</td><td>warn</td><td>warn</td><td>warn</td><td>warn</td></tr>
+  </table></div>
 
-      <section id="snapdragon" class="wrap">
-        <h2>Why Snapdragon</h2>
-        <p>
-          Faraday Gate depends on local processing: deterministic scanning today, local
-          classifiers and local code generation on the roadmap. Snapdragon AI PCs make
-          local-first privacy practical instead of aspirational — the reason the firewall can
-          promise that guarded content never leaves the machine.
-        </p>
-      </section>
-    </main>
+  <h2 id="report">Proof report</h2>
+  <p>Paste the JSON from <code>faraday prove latest --format json</code> to read it as a report. This runs entirely in your browser: nothing is uploaded, and no data leaves this page.</p>
+  <label class="sr-only" for="report-input">Proof report JSON</label>
+  <textarea id="report-input" spellcheck="false" placeholder='{ "session_id": "…" } — run: faraday prove latest --format json'></textarea>
+  <div class="actions">
+    <button class="button" id="render-report" type="button">Render report</button>
+    <button class="button ghost" id="load-sample" type="button">Load sample</button>
+    <button class="button ghost" id="clear-report" type="button">Clear</button>
+  </div>
+  <div id="report-status" class="note" role="status" aria-live="polite"></div>
+  <div id="report-output" class="report" aria-live="polite"></div>
 
-    <footer class="site-footer">
-      <div class="wrap">
-        <p>Faraday Gate — Your agents. Your code. No leaks.</p>
-        <p class="note">
-          This site hosts documentation only. The CLI security engine runs locally.
-        </p>
-      </div>
-    </footer>
+  <h2>What it does not promise</h2>
+  <p class="statement">Defense in depth. It reduces accidental leakage and prompt-injection risk; it is not a mathematical guarantee. Protected operations fail closed. Wrapped commands never use <code>shell=True</code>. Exit codes: 1 policy block, 2 configuration error, 3 internal failure. Tail truncation of the audit chain is a documented limitation.</p>
+  <p>In this MVP, local model activity is labeled as simulated, and egress is an application-level observation. Faraday does not enforce OS-level network isolation. The 3D scene on this page is an illustration, not live data.</p>
+  <p><a href="https://github.com/sripavan098-creator/faraday_gate_ai/blob/main/docs/SECURITY_REVIEW.md">Security review and risk register →</a></p>
+</div>
+</section>
+</main>
 
-    <script src="report.js"></script>
-  </body>
+<footer>
+  <span>Faraday Gate — Your agents. Your code. No leaks.</span>
+  <span>Snapdragon AI PCs make local-first privacy practical. Documentation only; the engine runs locally.</span>
+</footer>
+
+<script src="vendor/three.min.js"></script>
+<script src="landing.js"></script>
+<script src="report.js"></script>
+</body>
 </html>

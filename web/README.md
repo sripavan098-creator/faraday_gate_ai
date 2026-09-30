@@ -22,9 +22,27 @@ JSON a user pastes and never sends it anywhere.
 | File | Purpose |
 |---|---|
 | `index.html` | Landing page and documentation |
-| `styles.css` | Styling (no remote fonts or CDNs) |
+| `landing.css` | Styling for the landing page and report viewer |
+| `landing.js` | Scroll-driven WebGL scene, heading effect, clock |
 | `report.js` | Client-side proof-report viewer |
+| `favicon.svg` | Self-hosted favicon |
+| `vendor/three.min.js` | Vendored three.js r128 (the scene library) |
+| `vendor/fonts.css` | `@font-face` rules for the self-hosted fonts |
+| `vendor/fonts/*.woff2` | Latin subsets of Barlow Condensed and IBM Plex Mono |
 | `vercel.json` | Security headers, including a strict CSP |
+
+## Why nothing is loaded from a CDN
+
+The CSP is `default-src 'none'` with `font-src 'self'` and `connect-src 'none'`.
+A remote font host or script CDN is unreachable by design, so anything the page
+needs is committed under `vendor/` and served from the same origin. The page
+makes no network requests at all after it loads, which is the point of a site
+about zero-egress tooling.
+
+The WebGL scene is an illustration, not live data. The threat feed it drives is
+labelled SIMULATED in the markup. If WebGL is unavailable, or three.js fails to
+initialise, the scene is skipped and the page degrades to static text; the
+report viewer and all documentation remain fully usable.
 
 ## Security headers
 
