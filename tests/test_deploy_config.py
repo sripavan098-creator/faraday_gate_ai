@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,9 @@ ROOT_CONFIG = REPO_ROOT / "vercel.json"
 WEB_CONFIG = REPO_ROOT / "web" / "vercel.json"
 INDEX_HTML = REPO_ROOT / "web" / "index.html"
 REPORT_JS = REPO_ROOT / "web" / "report.js"
+LANDING_JS = REPO_ROOT / "web" / "landing.js"
+LANDING_CSS = REPO_ROOT / "web" / "landing.css"
+VENDOR = REPO_ROOT / "web" / "vendor"
 
 EXPECTED_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -132,3 +136,77 @@ def test_report_viewer_never_uses_dom_injection() -> None:
         r"new Function\(",
     ):
         assert not re.search(pattern, code), f"unsafe DOM API in report.js: {pattern}"
+
+
+def test_index_makes_no_cross_origin_requests() -> None:
+    """The CSP blocks other origins, so any absolute URL would simply fail.
+
+    The page is a statement about zero-egress tooling; it should not phone a CDN
+    for a font or a script while saying so.
+    """
+    html = INDEX_HTML.read_text()
+    for match in re.finditer(r'(?:src|href)\s*=\s*"([^"]+)"', html):
+        target = match.group(1)
+        if target.startswith(("http://", "https://")):
+            # Documentation links are fine; subresources are not.
+            assert not re.search(r'\.(js|css|woff2?|svg)$', target), (
+                f"subresource loaded from another origin: {target}"
+            )
+        assert "//fonts.googleapis.com" not in target
+        assert "//fonts.gstatic.com" not in target
+        assert "//cdnjs.cloudflare.com" not in target
+
+
+def test_vendored_assets_are_present() -> None:
+    """Every same-origin asset the page references must actually be committed."""
+    html = INDEX_HTML.read_text()
+    refs = [
+        m.group(1)
+        for m in re.finditer(r'<(?:script|link)[^>]*?(?:src|href)="([^"]+)"', html)
+    ]
+    assert refs, "expected the page to reference its assets"
+    for ref in refs:
+        if ref.startswith(("http://", "https://", "#")):
+            continue
+        assert (REPO_ROOT / "web" / ref).is_file(), f"missing asset: web/{ref}"
+
+
+def test_font_css_has_no_remote_sources() -> None:
+    css = (VENDOR / "fonts.css").read_text()
+    assert "fonts.gstatic.com" not in css
+    assert "https://" not in css
+    for match in re.finditer(r"url\(([^)]+)\)", css):
+        target = match.group(1).strip("'\"")
+        assert not target.startswith("http"), f"remote font source: {target}"
+        assert (VENDOR / target).is_file(), f"missing font file: {target}"
+
+
+def test_landing_js_has_no_syntax_errors() -> None:
+    """An octal escape under 'use strict' silently kills the whole script.
+
+    That is exactly what happened once: the scene never started and the page
+    looked fine, because a parse error in an external script is invisible in the
+    markup. Compile it here instead.
+    """
+    for path in (LANDING_JS, REPORT_JS):
+        result = subprocess.run(
+            ["node", "--check", str(path)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0 and "not found" in result.stderr:
+            pytest.skip("node is not available to syntax-check the scripts")
+        assert result.returncode == 0, f"{path.name} failed to parse:\n{result.stderr}"
+
+
+def test_landing_css_and_html_agree_on_class_names() -> None:
+    """Catch a stylesheet rename that leaves the markup pointing at dead classes."""
+    css = LANDING_CSS.read_text()
+    html = INDEX_HTML.read_text()
+    # The report viewer's class names are produced by report.js, not the markup,
+    # so only check the classes the page itself declares.
+    for name in ("bar", "hud", "feed", "chips", "tx", "doc", "verdict"):
+        assert f".{name}" in css, f".{name} missing from landing.css"
+    assert 'class="feed"' in html
+    assert 'class="hud"' in html
+

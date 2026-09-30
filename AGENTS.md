@@ -199,6 +199,14 @@ could contain markup. Never introduce `innerHTML` there. The CSP in
 `vercel.json` has no `unsafe-inline`, so `index.html` must have no inline
 handlers or `style=` attributes.
 
+The page also loads nothing from another origin: three.js is vendored under
+`web/vendor/three.min.js` and the fonts are self-hosted woff2 files under
+`web/vendor/fonts/`. The CSP (`default-src 'none'`, `font-src 'self'`,
+`connect-src 'none'`) would block a CDN anyway, and a site about zero-egress
+tooling should not make cross-origin requests. Tests assert this. Landing-page
+behaviour lives in `web/landing.js`; because a parse error in an external
+script is invisible in the markup, a test runs `node --check` on it.
+
 ## Build progress
 
 - [x] Step 1 — project foundation (structure, pyproject, CLI skeleton)
