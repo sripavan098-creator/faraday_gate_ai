@@ -72,8 +72,29 @@ specific release-gate requirement.
 
 ### Dependency audit
 
-`pip-audit` reports **no known vulnerabilities**. `faraday-gate` itself is
-skipped because it is not published to PyPI.
+`pip-audit` reports **no known vulnerabilities** in the declared dependency set.
+`faraday-gate` itself is skipped because it is not published to PyPI.
+
+One real finding came out of CI, and it is worth recording because the local run
+did not catch it:
+
+- **CVE-2026-59890** (`GHSA-h35f-9h28-mq5c`, `PYSEC-2026-3447`) in
+  `setuptools` < 83.0.0: a `MANIFEST.in` exclusion bypass in sdist building via
+  a Unicode normalization collision (NFC/NFD) on macOS APFS/HFS+.
+
+This is directly relevant to a project whose threat model is "files you intended
+to exclude leak anyway", so we raised the floor rather than suppressing the
+finding:
+
+- `pyproject.toml` build-system requires `setuptools>=83` (was `>=68`).
+- The CI `security` job upgrades setuptools before auditing.
+
+Why the local run missed it: the advisory is against the *build environment's*
+setuptools, and `pip install -e .` does not leave setuptools in the virtualenv,
+so `pip-audit` had nothing to report. The GitHub runner ships setuptools 79.0.1
+in its Python 3.11 image, so CI surfaced it. Reproduced locally by installing
+`setuptools==79.0.1` into a scratch venv, which reported the advisory, and
+confirmed clean after upgrading to 83+.
 
 ### Secret scan
 

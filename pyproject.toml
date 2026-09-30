@@ -52,7 +52,9 @@ dev = [
 faraday = "faraday.cli:app"
 
 [build-system]
-requires = ["setuptools>=68"]
+# Floor is 83, not 68: CVE-2026-59890 is a MANIFEST.in exclusion bypass in sdist
+# building (Unicode normalization collision), fixed in 83.0.0.
+requires = ["setuptools>=83"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
