@@ -58,6 +58,33 @@ vercel --prod
 Vercel settings: **Root Directory** `web`, **Framework Preset** `Other`,
 **Build Command** empty, **Output Directory** `.`.
 
+## Why there is no Python entrypoint
+
+Vercel's project detection may report:
+
+> No python entrypoint found in default locations, but found potential
+> entrypoints: `faraday/cli.py` (variable: `app`)
+
+**Do not add `entrypoint = "faraday.cli:app"` to `pyproject.toml`.** That would
+deploy the CLI as a web application, which cannot work:
+
+- `faraday.cli:app` is a `typer.Typer` instance. Its `__call__` takes `args` /
+  `kwargs` and dispatches CLI arguments; it is neither ASGI
+  (`app(scope, receive, send)`) nor WSGI (`app(environ, start_response)`).
+  Calling it as either raises immediately (`TypeError: str expected, not
+  function` / `AttributeError: 'function' object has no attribute 'lstrip'`).
+- There is no web framework in the dependency set.
+- `faraday dashboard` renders a Rich **terminal** dashboard, not HTML.
+
+The deployable artifact is the static site in `web/`. The root `vercel.json`
+pins that explicitly (`outputDirectory: "web"`, empty build and install
+commands, no framework) so Vercel never falls back to Python autodetection.
+
+Because Vercel applies the config at the deploy root and ignores a nested one,
+the security headers are duplicated in both `vercel.json` and `web/vercel.json`.
+A test asserts the two blocks stay identical, so whichever one is in effect
+always carries the headers.
+
 ## Verify after deploy
 
 ```bash
