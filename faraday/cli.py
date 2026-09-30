@@ -6,7 +6,7 @@ import json
 import shutil
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, cast
 
 import typer
 import yaml
@@ -34,7 +34,7 @@ from faraday.core.flow import (
     create_session_for_policy,
     finalize_session,
 )
-from faraday.core.policy import default_policy
+from faraday.core.policy import Mode, default_policy, mode_policy
 from faraday.core.proof import (
     ProofError,
     build_proof,
@@ -42,8 +42,14 @@ from faraday.core.proof import (
     proof_to_dict,
     render_proof,
 )
-from faraday.core.wrap import run_wrap
+from faraday.core.session import SessionStatus
+from faraday.core.wrap import classify_findings, run_wrap
 from faraday.redactor import redact_text
+from faraday.redactor.ast_redactor import (
+    ASTRedactor,
+    RedactionValidationError,
+    language_for_path,
+)
 from faraday.scanners.base import ScanFinding
 from faraday.scanners.files import read_git_diff, scan_path
 from faraday.scanners.path_rules import scan_path_denial
@@ -54,6 +60,9 @@ from faraday.tui.dashboard import (
     format_dashboard_plain,
     render_dashboard,
 )
+
+MODE_PRESETS = ("strict-local", "sanitize-external", "observe-only")
+
 
 app = typer.Typer(
     help="Faraday Gate: zero-egress AI agent firewall for AI coding agents.",
@@ -217,9 +226,20 @@ def init(
         False,
         "--force",
         help="Overwrite existing .faraday/config.yaml if present.",
-    )
+    ),
+    preset: Optional[str] = typer.Option(
+        None,
+        "--preset",
+        "-p",
+        help="Scaffold a mode preset: strict-local, sanitize-external, or observe-only.",
+    ),
 ) -> None:
     """Initialize Faraday Gate in the current repository."""
+
+    if preset is not None and preset not in MODE_PRESETS:
+        console.print(f"[red]Unknown preset:[/red] {preset}")
+        console.print("Allowed presets: " + ", ".join(MODE_PRESETS))
+        raise typer.Exit(code=2)
 
     root = ensure_faraday_structure()
     target_config = config_path()
@@ -230,7 +250,7 @@ def init(
         console.print("Use [bold]--force[/bold] to overwrite.")
         raise typer.Exit(code=2)
 
-    policy = default_policy()
+    policy = mode_policy(cast(Mode, preset)) if preset else default_policy()
     save_policy(policy, target_config)
 
     if force or not target_default_policy.exists():
@@ -240,6 +260,9 @@ def init(
     console.print(f"Root: {root}")
     console.print(f"Config: {target_config}")
     console.print(f"Default policy: {target_default_policy}")
+
+    if preset:
+        console.print(f"Mode preset: {preset}")
 
 
 @app.command()
@@ -428,11 +451,12 @@ def scan(
     add_scan_findings(session, findings)
     append_findings(chain, session, findings)
 
-    blocked = [
-        finding for finding in findings if finding.recommended_action == "block"
-    ]
+    # Blocking is decided by policy, not by the scanner's built-in action.
+    # The scanners hardcode the strictest reasonable action; the active policy
+    # (for example `observe-only`) is what turns a detection into a denial.
+    blocked, _, _ = classify_findings(findings, policy)
 
-    status = "blocked" if blocked else "completed"
+    status: SessionStatus = "blocked" if blocked else "completed"
     finalize_session(chain, session, status=status)
 
     output_findings(findings, format)
@@ -449,6 +473,38 @@ def scan(
         if format != "json":
             console.print("[BLOCKED] Blocking findings detected.")
         raise typer.Exit(code=1)
+
+
+def _redact_source(
+    text: str,
+    findings: List[ScanFinding],
+    mode: str = "sensitive",
+    path: Optional[str] = None,
+):
+    """Redact source text, preferring AST redaction for supported languages.
+
+    AST redaction preserves quoting, string prefixes, and interpolations, and
+    validates that the result still parses. It is used only when the file has a
+    known grammar and the input already parses; anything else falls back to the
+    heuristic text redactor.
+    """
+
+    if path:
+        language = language_for_path(path)
+
+        if language:
+            redactor = ASTRedactor(language)
+
+            if redactor.available:
+                try:
+                    return redactor.redact(text, findings, mode=mode)
+                except RedactionValidationError as exc:
+                    console.print(
+                        f"[yellow]AST redaction unavailable ({exc}); "
+                        "falling back to text redaction.[/yellow]"
+                    )
+
+    return redact_text(text, findings, mode=mode)
 
 
 @app.command()
@@ -546,7 +602,7 @@ def redact(
     append_findings(chain, session, findings)
 
     try:
-        result = redact_text(text, findings, mode=mode)
+        result = _redact_source(text, findings, mode=mode, path=path_value)
     except ValueError as exc:
         console.print(f"[red]Redaction error:[/red] {exc}")
         raise typer.Exit(code=2)
@@ -812,14 +868,18 @@ def gate(
         console.print("  observe-only")
         raise typer.Exit(code=2)
 
-    policy.mode = mode
+    # Apply the full preset so `gate --mode` and `init --preset` agree.
+    # User edits to other fields (custom deny paths, allow lists) are
+    # preserved; only the fields that define the mode are replaced.
+    preset_policy = mode_policy(cast(Mode, mode))
 
-    if mode == "strict-local":
-        policy.network.egress = "deny"
-    elif mode == "sanitize-external":
-        policy.network.egress = "allow"
-    elif mode == "observe-only":
-        policy.network.egress = "deny"
+    policy.mode = preset_policy.mode
+    policy.policy_version = preset_policy.policy_version
+    policy.network = preset_policy.network
+    policy.secrets = preset_policy.secrets
+    policy.pii = preset_policy.pii
+    policy.prompt_injection = preset_policy.prompt_injection
+    policy.commands = preset_policy.commands
 
     try:
         save_policy(policy, config_path())

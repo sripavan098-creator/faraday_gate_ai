@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
+from faraday.core.session import Severity
 from faraday.scanners.base import ScanFinding, line_of_index, shannon_entropy
 
-SECRET_PATTERNS = [
+SECRET_PATTERNS: List[Tuple[str, str, Severity]] = [
     (
         "aws_access_key_id",
         r"\bAKIA[0-9A-Z]{16}\b",

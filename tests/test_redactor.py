@@ -176,6 +176,9 @@ def test_redaction_output_does_not_leak_matched_attribute():
     dumped = findings[0].model_dump()
     assert "matched" not in dumped
 
+    # The redacted text must not contain the raw secret either.
+    assert "sk_test_fake1234567890" not in result.redacted_text
+
 
 def test_redact_database_url_keeps_url_scheme_out_of_output():
     text = 'DATABASE_URL = "postgres://fake_user:fake_password@localhost:5432/fake_db"'

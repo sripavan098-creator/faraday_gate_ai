@@ -41,6 +41,7 @@ class ProofReport:
     model_backends: List[str] = field(default_factory=list)
 
     egress_method: str = "not-recorded"
+    egress_observed_connections: List[str] = field(default_factory=list)
     egress_label: str = ""
     egress_details: str = ""
 
@@ -83,7 +84,10 @@ def label_egress(method: str) -> Tuple[str, str]:
     if method == "measured-process":
         return (
             "Process egress measured",
-            "Process/network egress was measured by the implementation.",
+            "Sockets were sampled around the wrapped process. "
+            "Detection is polling-based, so connections shorter than the "
+            "sampling interval can be missed; a 'no connections' result means "
+            "'none observed', not 'none happened'.",
         )
 
     if method == "os-isolation":
@@ -109,9 +113,12 @@ def build_proof(chain: AuditChain, session_id: str = "latest") -> ProofReport:
     if session_id == "latest":
         row = sessions[0]
     else:
-        row = next((s for s in sessions if s["id"] == session_id), None)
+        row = next(
+            (s for s in sessions if s["id"] == session_id),
+            {},  # type: ignore[arg-type]
+        )
 
-        if row is None:
+        if not row:
             raise ProofError(f"Session not found: {session_id}")
 
     sid = str(row["id"])
@@ -131,7 +138,7 @@ def build_proof(chain: AuditChain, session_id: str = "latest") -> ProofReport:
     files_scanned = int(row.get("files_scanned") or 0)
     prompt_tokens_scanned = int(row.get("prompt_tokens_scanned") or 0)
     egress_method = "not-recorded"
-
+    egress_observed_connections: List[str] = []
     findings_total = 0
     secrets_blocked = 0
     injections_blocked = 0
@@ -172,6 +179,19 @@ def build_proof(chain: AuditChain, session_id: str = "latest") -> ProofReport:
 
             if metadata.get("finding_type") == "pii":
                 sensitive_redactions += 1
+
+        elif event.event == "egress_observation":
+            if metadata.get("method"):
+                egress_method = str(metadata["method"])
+
+            for connection in metadata.get("new_connections") or []:
+                if not isinstance(connection, dict):
+                    continue
+
+                egress_observed_connections.append(
+                    f"{connection.get('remote_ip')}:"
+                    f"{connection.get('remote_port')}"
+                )
 
         elif event.event == "policy_decision":
             if metadata.get("mode"):
@@ -231,6 +251,13 @@ def build_proof(chain: AuditChain, session_id: str = "latest") -> ProofReport:
         )
     elif egress_method == "not-recorded":
         limitations.append("No egress observation was recorded for this session.")
+    elif egress_method == "measured-process":
+        limitations.append(
+            "Egress was measured by polling socket state. Connections that open "
+            "and close between samples can be missed, so 'no connections' means "
+            "'none observed', not 'none happened'. Faraday does not block network "
+            "access at the OS level in this MVP."
+        )
 
     limitations.append(
         "Detection is defense-in-depth and not a guarantee of perfect secret or "
@@ -260,6 +287,7 @@ def build_proof(chain: AuditChain, session_id: str = "latest") -> ProofReport:
         sensitive_redactions=sensitive_redactions,
         model_backends=model_backends,
         egress_method=egress_method,
+        egress_observed_connections=egress_observed_connections,
         egress_label=egress_label,
         egress_details=egress_details,
         audit_chain_valid=audit_ok,
@@ -316,6 +344,11 @@ def format_proof_plain(report: ProofReport) -> str:
             f"Egress Method: {report.egress_method}",
             f"Egress Label: {report.egress_label}",
             f"Egress Details: {report.egress_details}",
+            (
+                "Egress Observed Connections: "
+                + (", ".join(report.egress_observed_connections)
+                   if report.egress_observed_connections else "none observed")
+            ),
             "",
             f"Audit Chain Valid: {report.audit_chain_valid}",
             f"Audit Message: {report.audit_message}",

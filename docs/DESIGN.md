@@ -11,10 +11,14 @@ below follows from that.
 Detection runs in two tiers:
 
 1. **Deterministic** — path rules, secret patterns, command guard, PII regex,
-   injection phrase rules. Fast, explainable, no model weights.
-2. **Learned (roadmap)** — local classifiers, embeddings, semantic leak review.
+   injection phrase rules, and heuristic semantic-leak review. Fast, explainable,
+   no model weights.
+2. **Learned (roadmap)** — local classifiers and embeddings.
 
-The MVP ships tier 1 only and labels tier 2 as roadmap. This is deliberate: a
+Tier 1 ships in full, including the heuristic semantic-leak reviewer. That
+reviewer is deliberately pattern-based rather than model-based, and it runs last
+in the pipeline so it can only *add* warnings: it can never remove or downgrade a
+deterministic block. Tier 2 is labeled roadmap. This split is deliberate: a
 security control that cannot explain *why* it blocked something is not
 auditable, and an audit trail is a core deliverable.
 

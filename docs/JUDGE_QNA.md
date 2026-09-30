@@ -216,13 +216,19 @@ It protects the exact moment where local developer context enters the AI agent.
 
 ## Question 14: What would you build next?
 
-The next high-value features are:
+First, one clarification so the answer is accurate rather than aspirational:
+AST-aware redaction with tree-sitter, semantic leak detection, and real
+process-based egress measurement are already implemented in this release. They
+are not future work.
 
-1. AST-aware redaction using tree-sitter
-2. sanitized workspace isolation
-3. real local Qwen Coder inference
-4. semantic leak detection
-5. Snapdragon/NPU benchmarking where verified
+Genuinely remaining work, in priority order:
+
+1. sanitized workspace isolation
+2. real local Qwen Coder inference
+3. Snapdragon/NPU benchmarking measured on device, not estimated
+4. head-anchored and HMAC-keyed audit chain
+5. stronger process and network isolation
+6. enterprise policy packs
 
 ---
 

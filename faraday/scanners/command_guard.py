@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import List
+from typing import List, Tuple
 
+from faraday.core.session import Severity
 from faraday.scanners.base import ScanFinding
 
-COMMAND_GUARD_PATTERNS = [
+COMMAND_GUARD_PATTERNS: List[Tuple[str, str, Severity]] = [
     ("curl", r"\bcurl\b", "high"),
     ("wget", r"\bwget\b", "high"),
     ("netcat", r"\bnc\b", "high"),

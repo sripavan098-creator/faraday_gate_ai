@@ -142,3 +142,50 @@ def default_policy() -> Policy:
         network=NetworkPolicy(egress="deny"),
         audit=AuditPolicy(hash_chain=True, sqlite=True, jsonl_export=True),
     )
+
+
+def mode_policy(mode: Mode) -> Policy:
+    """Return a starter policy for a documented gate mode.
+
+    These make the three modes in the PRD concrete and reviewable rather than
+    something the user has to assemble by hand. The differences are deliberate
+    and narrow -- only what actually changes between modes varies; everything
+    else stays identical to the strict-local baseline so the modes are easy to
+    diff and explain.
+
+    None of these modes claim OS-level network isolation. `network.egress` is a
+    Faraday-level policy statement, reported honestly in the proof output as
+    an application-level observation.
+    """
+
+    policy = default_policy()
+
+    if mode == "strict-local":
+        # Baseline: deny egress, block on secrets/injection/commands.
+        return policy
+
+    if mode == "sanitize-external":
+        # External calls are permitted, but sensitive content must be removed
+        # first. Secrets stay blocking because a sanitized payload should not
+        # contain them at all; PII stays redactable.
+        policy.mode = "sanitize-external"
+        policy.policy_version = "sanitize-external-v1"
+        policy.network.egress = "allow"
+        policy.secrets.action = "block"
+        policy.pii.action = "redact"
+        return policy
+
+    if mode == "observe-only":
+        # Record everything, block nothing. For evaluating Faraday against a
+        # real repository before enforcing. Egress stays denied because this
+        # mode changes enforcement, not connectivity.
+        policy.mode = "observe-only"
+        policy.policy_version = "observe-only-v1"
+        policy.secrets.action = "warn"
+        policy.pii.action = "warn"
+        policy.prompt_injection.action = "warn"
+        policy.commands.action = "warn"
+        policy.network.egress = "deny"
+        return policy
+
+    raise ValueError(f"Unknown mode: {mode}")

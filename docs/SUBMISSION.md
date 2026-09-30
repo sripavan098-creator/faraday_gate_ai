@@ -165,7 +165,7 @@ The hardest challenges were:
 2. Avoiding security theater: we had to label egress status honestly instead of overclaiming.
 3. Balancing security and usability: blocking too much hurts productivity; blocking too little creates risk.
 4. Building a tamper-evident audit trail without storing raw secrets.
-5. Designing redaction that preserves syntax without a full AST engine in the MVP.
+5. Designing redaction that preserves syntax. We solved this in two layers: a text redactor that always works, and a tree-sitter AST redactor that validates its own output parses before returning it, degrading to text redaction when a grammar is unavailable.
 
 ## Accomplishments
 
@@ -193,16 +193,39 @@ Developers need a local control plane that can make decisions before sensitive c
 
 ## What's Next
 
-Next phases:
+Some phases originally listed here have since shipped, so they no longer belong
+on this list: AST-aware redaction with tree-sitter, semantic leak detection, and
+real process-based egress measurement are all implemented in this release.
 
-1. AST-aware redaction using tree-sitter
-2. sanitized workspace isolation
-3. real local model orchestration
-4. local Qwen Coder inference
-5. semantic leak detection
-6. Snapdragon/NPU benchmarking where verified
-7. stronger process/network isolation
-8. enterprise policy packs
+Genuinely remaining work:
+
+1. sanitized workspace isolation
+2. real local model orchestration
+3. local Qwen Coder inference
+4. Snapdragon/NPU benchmarking measured on device, not estimated
+5. stronger process and network isolation
+6. enterprise policy packs
+7. head-anchored and HMAC-keyed audit chain
+
+## Verification
+
+The release gate runs these checks, and the full results are recorded in
+`docs/SECURITY_REVIEW.md`:
+
+| Check | Result |
+|---|---|
+| `pytest -q` | 242 passed (241 + 1 skipped under ambient traffic) |
+| `ruff check .` | clean |
+| `mypy` | clean, 35 source files |
+| `bandit -r faraday -lll` | 0 High (1 Medium is a false positive) |
+| `pip-audit` | no known vulnerabilities |
+| `shellcheck scripts/*.sh` | clean |
+| `scripts/smoke.sh` | pass |
+| `scripts/e2e.sh` | 20 pass, 0 fail |
+
+`scripts/e2e.sh` is the behavioural gate. It builds a throwaway hostile
+repository and asserts each security property with an **exact** exit code, so a
+crash cannot be mistaken for a deliberate block.
 
 ## Security Statement
 

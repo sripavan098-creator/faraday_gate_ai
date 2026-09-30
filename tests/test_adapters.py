@@ -205,7 +205,7 @@ def test_wrap_egress_label_for_execute(tmp_path, monkeypatch):
         execute=True,
     )
 
-    assert result.egress_method == "not-measured"
+    assert result.egress_method == "measured-process"
     assert result.status == "completed"
     assert "hello world" in result.safe_output
 
@@ -227,7 +227,7 @@ def test_wrap_scans_and_redacts_executed_output(tmp_path, monkeypatch):
 
     assert "ada@example.com" not in result.safe_output
     assert "[EMAIL_1]" in result.safe_output
-    assert result.egress_method == "not-measured"
+    assert result.egress_method == "measured-process"
 
 
 def test_wrap_blocks_secret_in_executed_output(tmp_path, monkeypatch):

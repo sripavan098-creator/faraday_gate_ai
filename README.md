@@ -95,6 +95,7 @@ relative to that directory.
 | `faraday scan` | Scan files, directories, prompts, or git diffs |
 | `faraday redact` | Print syntax-preserving redacted output |
 | `faraday wrap -- <cmd>` | Run an AI CLI tool under Faraday Gate protection |
+| `faraday init --preset <mode>` | Initialize with a mode preset |
 | `faraday gate --mode strict-local` | Set the active protection mode |
 | `faraday policy show` | Show active policy |
 | `faraday policy validate` | Validate the policy file |
@@ -207,6 +208,32 @@ The current MVP benchmarks deterministic scanners and provides integration point
 
 ---
 
+## Protection Modes
+
+Faraday Gate has three modes. Each is available as a starter policy via
+`faraday init --preset <mode>` or by switching an initialized repo with
+`faraday gate --mode <mode>`. Both paths produce the same policy.
+
+| Mode | Egress | Secrets | PII | Injection | Commands |
+|---|---|---|---|---|---|
+| `strict-local` (default) | deny | block | redact | block | block |
+| `sanitize-external` | allow | block | redact | block | block |
+| `observe-only` | deny | warn | warn | warn | warn |
+
+`sanitize-external` is for the case where an external call is intended: the
+payload must be sanitized first, so secrets still block rather than being sent
+in redacted form.
+
+`observe-only` is for evaluating Faraday against a real repository before
+enforcing: every detection is recorded and reported, nothing is blocked. It
+does not enable egress, because it changes enforcement, not connectivity.
+
+Path deny rules and the audit chain are active in **all** modes. `network.egress`
+is a Faraday-level policy statement and is reported as an application-level
+observation — none of these modes claim OS-level network isolation.
+
+---
+
 ## Security Model
 
 Faraday Gate is a defense-in-depth layer.
@@ -256,21 +283,53 @@ Simulated:
 
 Roadmap:
 
-- tree-sitter AST-aware redaction
 - sanitized workspace isolation
 - real local model orchestration
 - local Qwen Coder inference
-- semantic leak detection
-- Snapdragon/NPU benchmarking where verified
+- Snapdragon/NPU benchmarking measured on device, not estimated
+- head-anchored and HMAC-keyed audit chain
+- stronger process and network isolation
+
+Implemented (previously listed here as roadmap): tree-sitter AST-aware redaction,
+semantic leak detection, and real process-based egress measurement.
 
 ---
 
 ## Testing
 
+Install everything the suite needs, then run it:
+
 ```bash
-pip install -e .[dev]
+pip install -e ".[dev]"
 pytest -q
 ```
+
+Note that `[dev]` deliberately includes `tree-sitter`, its grammars, and
+`psutil`. Without them the AST-redaction and measured-egress tests fail rather
+than skip, because they exercise shipped features.
+
+### Release gate
+
+Before a release branch is merged, all of these must pass:
+
+```bash
+pip install -e ".[dev]"
+pytest -q                    # unit and integration
+ruff check .                 # lint
+mypy                         # types
+bandit -r faraday -lll       # security lint, fails on High severity
+pip-audit                    # dependency vulnerabilities
+./scripts/smoke.sh           # CLI smoke test
+./scripts/e2e.sh             # behavioural gate
+```
+
+`scripts/e2e.sh` builds a throwaway hostile repository and asserts each security
+property with an exact exit code: `1` for a policy block, `2` for a configuration
+error, `3` for an internal failure. Asserting exact codes matters, because a
+crash that exits non-zero must not be mistaken for a deliberate block.
+
+Results from the current release are recorded in
+[docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md).
 
 ---
 
